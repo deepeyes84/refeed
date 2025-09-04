@@ -1,5 +1,5 @@
 {
-  "name": "피크위크 계산기 — 스포츠모델",
+  "name": "피크위크 계산기",
   "short_name": "피크위크 계산기",
   "start_url": "./?source=pwa",
   "scope": "./",
