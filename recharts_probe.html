@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Recharts 로딩 점검 페이지</title>
+  <style>body{font-family:system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Apple SD Gothic Neo, sans-serif; padding:20px}</style>
+
+  <!-- React/ReactDOM 먼저 -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+
+  <!-- 로컬 vendored Recharts 우선 -->
+  <script src="./vendor/Recharts.min.js"></script>
+  <!-- 실패 시 CDN 폴백 -->
+  <script>
+    (function ensureRecharts(){
+      if (window.Recharts) return;
+      var s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js';
+      s.onload=function(){ console.log('Recharts via jsDelivr OK'); };
+      s.onerror=function(){
+        var t=document.createElement('script');
+        t.src='https://unpkg.com/recharts/umd/Recharts.min.js';
+        t.onload=function(){ console.log('Recharts via unpkg OK'); };
+        t.onerror=function(){ console.error('Recharts load failed'); };
+        document.head.appendChild(t);
+      };
+      document.head.appendChild(s);
+    })();
+  </script>
+</head>
+<body>
+  <h1>Recharts 로딩 점검</h1>
+  <p id="diag">진단: 준비 중…</p>
+  <div id="root" style="width:100%;height:260px;border:1px solid #e5e7eb;border-radius:12px;padding:8px;"></div>
+
+  <script>
+    function updateDiag(){
+      var lines = [];
+      lines.push('React: ' + (typeof React));
+      lines.push('ReactDOM: ' + (typeof ReactDOM));
+      lines.push('Recharts: ' + (window.Recharts ? 'OK' : 'undefined'));
+      document.getElementById('diag').textContent = '진단: ' + lines.join(' | ');
+    }
+    updateDiag();
+    setTimeout(updateDiag, 500);
+    setTimeout(function(){
+      if (!window.Recharts) return;
+      const { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } = window.Recharts;
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      function Demo(){
+        const data=[{name:'A',value:4},{name:'B',value:3},{name:'C',value:2}];
+        const COLORS=['#60a5fa','#34d399','#f59e0b'];
+        return React.createElement(ResponsiveContainer,{width:'100%',height:240},
+          React.createElement(PieChart,null,
+            React.createElement(Pie,{dataKey:'value',nameKey:'name',data:data,outerRadius:90,label:true},
+              data.map((_,i)=>React.createElement(Cell,{key:i,fill:COLORS[i%COLORS.length]}))
+            ),
+            React.createElement(Tooltip,null)
+          )
+        );
+      }
+      root.render(React.createElement(Demo,null));
+    }, 800);
+  </script>
+</body>
+</html>
