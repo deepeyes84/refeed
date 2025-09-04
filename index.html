@@ -1,143 +1,1009 @@
 <!doctype html>
 <html lang="ko">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>피크위크 계산기 — v1.2 (Recharts + react-is UMD 포함)</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>html,body{height:100%}body{background:#f8fafc}.notice{background:#fff3cd;color:#7c6200;border:1px solid #ffe69c;border-radius:12px;padding:10px 12px;font-size:14px}</style>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>피크위크 계산기 — v1.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+    <script type="text/babel" data-presets="env,react">
+import React, { useMemo, useState, useEffect, useRef } from "react";
+import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, LineChart, Line, CartesianGrid, RadialBarChart, RadialBar, Legend } from "recharts";
 
-  <!-- 0) React 먼저 (Recharts가 전역 React 참조) -->
-  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
-  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+// ==========================================
+// Peak Week Calculator — v1.2
+// - v1.1 유지. 이 파일은 추가 기능(옵션 1,2,4,5,6,7,8,10) + 시각화 + 드래그 정렬 지원 버전
+// - 모든 수식/변수 흐름은 v1.1 기반. (필요시 옵션으로 on/off)
+// ==========================================
 
-  <!-- 1) react-is UMD (Recharts가 내부적으로 참조) -->
-  <!-- 로컬 vendoring을 원하면 ./vendor/react-is.production.min.js 로 교체하세요. -->
-  <script src="https://cdn.jsdelivr.net/npm/react-is/umd/react-is.production.min.js" crossorigin></script>
+// ------------------ 식품 DB (확장 가능) ------------------
+const FOODS = {
+  garaetteok: { name: "가래떡", unit: 100, C: 49.0, P: 3.7, F: 0.4, kcal: 213, Na: 261, fiber: 0.3, sugar: 0 },
+  rice: { name: "흰쌀밥(밥)", unit: 100, C: 28.3, P: 2.7, F: 0.3, kcal: 130, Na: 1, fiber: 0.4, sugar: 0 },
+  honey: { name: "밤꿀(=꿀)", unit: 100, C: 82.4, P: 0.3, F: 0.0, kcal: 304, Na: 4, fiber: 0, sugar: 82.4 },
 
-  <!-- 2) 로컬 vendored Recharts 우선 -->
-  <script src="./vendor/Recharts.min.js"></script>
+  chicken: { name: "닭안심살", unit: 100, C: 0.0, P: 23.1, F: 1.2, kcal: 110 },
+  eggwhite: { name: "계란흰자", unit: 100, C: 0.73, P: 10.9, F: 0.17, kcal: 52 },
+  wpi: { name: "WPI(웨이 아이솔레이트)", unit: 30, C: 1.0, P: 25.0, F: 0.5, kcal: 110 },
 
-  <!-- 3) 로컬 실패 시 CDN 폴백 -->
-  <script>
-    (function ensureRecharts(){
-      if (window.Recharts) return; // local worked
-      var triedJsDelivr = false;
-      function inject(src) {
-        var s = document.createElement('script');
-        s.src = src;
-        s.onload = function(){ window.__RECHARTS_READY__ = true; };
-        s.onerror = function(){
-          if (!triedJsDelivr) { triedJsDelivr = true; inject('https://unpkg.com/recharts/umd/Recharts.min.js'); }
-          else { window.__RECHARTS_FAILED__ = true; }
-        };
-        document.head.appendChild(s);
-      }
-      inject('https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js');
-    })();
-  </script>
+  avocado: { name: "아보카도", unit: 100, C: 8.5, P: 2.0, F: 14.7, kcal: 160 },
+  oliveoil: { name: "엑스트라버진 올리브오일", unit: 1, C: 0.0, P: 0.0, F: 1.0, kcal: 9 },
+};
 
-  <!-- 4) Babel (in-browser JSX) -->
-  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
-</head>
-<body>
-  <div id="root"></div>
+const DAY_OPTIONS = [
+  { key: -8, label: "D-8 (리피딩)" },
+  { key: -7, label: "D-7 (리피딩)" },
+  { key: -6, label: "D-6 (디플리션)" },
+  { key: -5, label: "D-5 (디플리션)" },
+  { key: -4, label: "D-4 (디플리션)" },
+  { key: -3, label: "D-3 (디플리션)" },
+  { key: -2, label: "D-2 (슈퍼컴펜세이션)" },
+  { key: -1, label: "D-1 (슈퍼컴펜세이션)" },
+  { key: 0, label: "D-day (퍼포먼스)" },
+];
 
-  <script type="text/babel" data-presets="env,react">
-    const { useMemo, useState } = React;
+const PROFILE_OPTIONS = [
+  { key: "conservative", label: "보수적", hint: "체중변동/붓기 민감 시" },
+  { key: "standard", label: "표준", hint: "권장 기본" },
+  { key: "aggressive", label: "공격적", hint: "근질/펌프 강조" },
+  { key: "extreme", label: "익스트림", hint: "개인 반응 확인 필요" },
+];
 
-    function ChartsSection({ macroData, timelineData }) {
-      if (!window.Recharts) {
-        return <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
-          <div className="font-semibold mb-2">시각화 대시보드</div>
-          <div className="notice">Recharts 로드 실패: <b>./vendor/Recharts.min.js</b> 를 저장소에 추가하거나, 네트워크에서 jsDelivr/unpkg 허용 후 다시 시도하세요.</div>
-        </section>;
-      }
-      const { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } = window.Recharts;
-      const COLORS = ["#60a5fa", "#34d399", "#f59e0b"];
-      return (
-        <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="rounded-2xl border bg-white p-4">
-              <div className="font-semibold mb-2">오늘 매크로 도넛 (kcal 기준)</div>
-              <div style={{ width: "100%", height: 240 }}>
-                <ResponsiveContainer width="100%" height={240}>
-                  <PieChart>
-                    <Pie data={macroData} dataKey="value" nameKey="name" outerRadius={90} label>
-                      {macroData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <div className="rounded-2xl border bg-white p-4">
-              <div className="font-semibold mb-2">D-8→D-day 매크로 타임라인 (g)</div>
-              <div style={{ width: "100%", height: 260 }}>
-                <ResponsiveContainer width="100%" height={260}>
-                  <BarChart data={timelineData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="day" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="C" name="탄수(g)" fill="#60a5fa" stackId="a" />
-                    <Bar dataKey="P" name="단백질(g)" fill="#34d399" stackId="a" />
-                    <Bar dataKey="F" name="지방(g)" fill="#f59e0b" stackId="a" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          </div>
-        </section>
-      );
+const PROTEIN_LEVELS = [
+  { key: 2.3, label: "2.3 g/kg LBM" },
+  { key: 2.6, label: "2.6 g/kg LBM" },
+  { key: 2.9, label: "2.9 g/kg LBM" },
+  { key: 3.1, label: "3.1 g/kg LBM" },
+];
+
+const MEAL_SPLITS = [
+  { key: "equal", label: "균등(25/25/25/25)", values: [0.25, 0.25, 0.25, 0.25] },
+  { key: "front", label: "전반부 집중(40/30/20/10)", values: [0.4, 0.3, 0.2, 0.1] },
+  { key: "back", label: "후반부 집중(10/20/30/40)", values: [0.1, 0.2, 0.3, 0.4] },
+  { key: "peri", label: "운동전후 집중(20/40/30/10)", values: [0.2, 0.4, 0.3, 0.1] },
+];
+
+const P_SOURCES = [
+  { key: "chicken", label: FOODS.chicken.name },
+  { key: "eggwhite", label: FOODS.eggwhite.name },
+  { key: "wpi", label: FOODS.wpi.name },
+];
+
+const F_SOURCES = [
+  { key: "oliveoil", label: FOODS.oliveoil.name },
+  { key: "avocado", label: FOODS.avocado.name },
+];
+
+function clamp(n, min, max) { return Math.min(Math.max(n, min), max); }
+function round2(n) { return Math.round(n * 100) / 100; }
+function kcalFromMacros({ P, C, F }) { return P * 4 + C * 4 + F * 9; }
+
+function phaseForDay(dayKey) {
+  if (dayKey === -8 || dayKey === -7) return "refeed";
+  if (dayKey >= -6 && dayKey <= -3) return "depletion";
+  if (dayKey === -2 || dayKey === -1) return "supercomp";
+  return "showday"; // D-day
+}
+
+function labelForPhase(phase) {
+  return ({ refeed: "리피딩", depletion: "디플리션", supercomp: "슈퍼컴펜세이션", showday: "대회 퍼포먼스" })[phase];
+}
+
+function defaultsByPhase(phase, profile) {
+  const p = profile || "standard";
+  if (phase === "refeed") {
+    return ({
+      conservative: { carbKind: "perLBM", carb_g_per: 4.0, fat_pct: 0.20 },
+      standard:     { carbKind: "perLBM", carb_g_per: 6.0, fat_pct: 0.20 },
+      aggressive:   { carbKind: "perLBM", carb_g_per: 8.0, fat_pct: 0.18 },
+      extreme:      { carbKind: "perLBM", carb_g_per: 10.0, fat_pct: 0.15 },
+    })[p];
+  }
+  if (phase === "depletion") {
+    return ({
+      conservative: { carbKind: "perLBM", carb_g_per: 1.25, fat_pct: 0.25 },
+      standard:     { carbKind: "perLBM", carb_g_per: 1.0,  fat_pct: 0.25 },
+      aggressive:   { carbKind: "perLBM", carb_g_per: 0.75, fat_pct: 0.27 },
+      extreme:      { carbKind: "perLBM", carb_g_per: 0.5,  fat_pct: 0.30 },
+    })[p];
+  }
+  if (phase === "supercomp") {
+    return ({
+      conservative: { carbKind: "perLBM", carb_g_per: 5.0,  fat_pct: 0.15 },
+      standard:     { carbKind: "perLBM", carb_g_per: 7.0,  fat_pct: 0.15 },
+      aggressive:   { carbKind: "perLBM", carb_g_per: 9.0,  fat_pct: 0.14 },
+      extreme:      { carbKind: "perLBM", carb_g_per: 10.0, fat_pct: 0.12 },
+    })[p];
+  }
+  return ({ // showday
+    conservative: { carbKind: "perBW", carb_g_per: 0.8, fat_pct: 0.15 },
+    standard:     { carbKind: "perBW", carb_g_per: 1.0, fat_pct: 0.15 },
+    aggressive:   { carbKind: "perBW", carb_g_per: 1.2, fat_pct: 0.15 },
+    extreme:      { carbKind: "perBW", carb_g_per: 1.5, fat_pct: 0.12 },
+  })[p];
+}
+
+// ================================
+// Numeric input bug fix helper (v1.1 재사용)
+// ================================
+function useNumericString(initial) {
+  const [str, setStr] = useState(String(initial));
+  const value = useMemo(() => {
+    if (str === "" || str === "." || str === "-") return 0; // 입력 중
+    const n = Number(str);
+    return Number.isFinite(n) ? n : 0;
+  }, [str]);
+  const onChange = (e) => {
+    // 소수점/쉼표 허용, 선행 0 자동 제거
+    let s = e.target.value.replace(',', '.');
+    s = s.replace(/^0+(?=\d)/, "");
+    // 소수점 1개만 허용 (음수는 계산상 0으로 처리되지만 입력 중 허용)
+    if (/^-?\d*(?:\.\d*)?$/.test(s)) setStr(s);
+  };
+  const onBlur = () => setStr(String(value));
+  const setValue = (n) => setStr(String(n));
+  return { str, value, onChange, onBlur, setValue };
+}
+
+function NumericField({ label, state, step = "0.1", suffix = "", min, max }) {
+  return (
+    <div>
+      <label className="block text-sm mb-1">{label}</label>
+      <input
+        inputMode="decimal"
+        className="w-full border rounded-xl px-3 py-2"
+        value={state.str}
+        onChange={state.onChange}
+        onBlur={state.onBlur}
+        step={step}
+        {...(min!==undefined?{min}:{})}
+        {...(max!==undefined?{max}:{})}
+      />
+      {suffix && <div className="text-xs text-slate-500 mt-1">{suffix}</div>}
+    </div>
+  );
+}
+
+// ==========================================
+// v1.2 — 컴포넌트 본체
+// ==========================================
+function PeakWeekCalculator_V12() {
+  // ===== 기본 입력 =====
+  const weightState = useNumericString(69.4);
+  const bfState = useNumericString(6.6);
+  const [dayKey, setDayKey] = useState(-8);
+  const [profile, setProfile] = useState("standard");
+  const [proteinLevel, setProteinLevel] = useState(2.6);
+  const [carbMix, setCarbMix] = useState({ garaetteok: 60, rice: 30, honey: 10 });
+  const [mealSplitKey, setMealSplitKey] = useState("peri");
+  const [pSource, setPSource] = useState("chicken");
+  const [fSource, setFSource] = useState("oliveoil");
+  const customCarbState = useNumericString(0);
+  const customFatPctState = useNumericString(0);
+
+  // ===== 옵션 1: YAZIO 검산 모드 =====
+  const [yazioMode, setYazioMode] = useState(false);
+  const tolC = useNumericString(0.5); // g
+  const tolP = useNumericString(0.5);
+  const tolF = useNumericString(0.5);
+  const tolKcal = useNumericString(5); // kcal
+
+  // ===== 옵션 2: 체중/컨디션 피드백 루프 =====
+  const morningWeightState = useNumericString(69.4);
+  const [bloat, setBloat] = useState(0); // 0~5
+  const [gi, setGi] = useState(0); // 0~5 (복부팽만/소화불편)
+  const [pump, setPump] = useState(0); // 0~5
+  const [applyFeedback, setApplyFeedback] = useState(false);
+
+  // ===== 옵션 4: 세션(AM/PM) 연동 자동보정+ =====
+  const [sessions, setSessions] = useState([
+    { id: "AM", type: "하체", minutes: 60, RPE: 7 },
+    { id: "PM", type: "상체", minutes: 60, RPE: 7 },
+  ]);
+
+  // ===== 옵션 5: GI 부담 관리 =====
+  const fiberTarget = useNumericString(15); // g/day 기본 낮춤 (피크위크)
+  const [giWeights, setGiWeights] = useState({ garaetteok: 0.2, rice: 0.15, honey: 0.5 }); // 가중치 조절 가능
+  const [giAutoTune, setGiAutoTune] = useState(false);
+
+  // ===== 옵션 6: 보충제 스케줄러 =====
+  const [suppPlan, setSuppPlan] = useState([
+    { name: "마그네슘", timing: "취침 30분 전", note: "수면/경련 예방", enable: true },
+    { name: "글리신", timing: "취침 30분 전", note: "수면 보조", enable: true },
+    { name: "카제인", timing: "취침 직전", note: "야간 단백질", enable: false },
+    { name: "글루타민", timing: "기상 직후/운동 후", note: "소화/회복 보조", enable: true },
+    { name: "오메가3", timing: "아침 식후", note: "지방산 보충", enable: true },
+    { name: "KSM-66", timing: "아침", note: "스트레스 완화", enable: false },
+    { name: "베타알라닌", timing: "운동 30분 전", note: "지구력 보조", enable: false },
+    { name: "크레아틴", timing: "운동 후", note: "로딩 유지(개별 전략)", enable: false },
+  ]);
+
+  // ===== 옵션 7: 물 조절 가드레일 =====
+  const minWater_ml_per_kg = useNumericString(35); // mL/kg 최저선
+
+  // ===== 옵션 8: 날짜별 규칙표 =====
+  const [rulesByDay, setRulesByDay] = useState(() => {
+    // 기본 규칙 (kg당)
+    return {
+      refeed: { water_ml_per_kg: 45, sodium_mg_per_kg: 50 },
+      depletion: { water_ml_per_kg: 45, sodium_mg_per_kg: 50 },
+      supercomp: { water_ml_per_kg: 35, sodium_mg_per_kg: 45 },
+      showday: { water_ml_per_kg: 25, sodium_mg_per_kg: 35 },
+    };
+  });
+
+  // ===== 옵션 10: 내보내기/스냅샷 =====
+  const [snapshots, setSnapshots] = useState(() => {
+    const raw = localStorage.getItem("ppk_v12_snapshots");
+    return raw ? JSON.parse(raw) : [];
+  });
+
+  // ===== 파생 값 =====
+  const weight = weightState.value;
+  const bf = bfState.value;
+  const LBM = useMemo(() => weight * (1 - clamp(bf, 0, 50) / 100), [weight, bf]);
+  const phase = useMemo(() => phaseForDay(dayKey), [dayKey]);
+  const defaults = useMemo(() => defaultsByPhase(phase, profile), [phase, profile]);
+
+  // 운동 자동보정(옵션 4) — 탄수 보정 + 분배 전환
+  const workoutAdjCarb = useMemo(() => {
+    const total = sessions.reduce((sum, s) => {
+      const perHour = {6:0,7:0.3,8:0.6,9:0.9}[s.RPE] || 0.3; // g/kg LBM/시간
+      return sum + (s.minutes/60) * perHour * LBM;
+    }, 0);
+    return total; // g
+  }, [sessions, LBM]);
+
+  const base_carb_g = useMemo(() => {
+    const gPer = customCarbState.value > 0 ? customCarbState.value : defaults.carb_g_per;
+    return defaults.carbKind === "perLBM" ? LBM * gPer : weight * gPer;
+  }, [defaults, weight, LBM, customCarbState.value]);
+
+  const carb_g_target_raw = base_carb_g + workoutAdjCarb;
+
+  // 컨디션 피드백(옵션 2) — 권고 조정값 산출
+  const feedback = useMemo(() => {
+    const recs = [];
+    const deltaW = morningWeightState.value - weight; // 전일 대비를 모르면 절대값 경고 용도
+    let carbAdjPct = 0;
+    let naAdjPct = 0;
+
+    if (bloat >= 3 || gi >= 3) {
+      carbAdjPct -= 0.1; // -10%
+      naAdjPct -= 0.05;  // -5%
+      recs.push("복부팽만/소화불편: 탄수 -10%, Na -5% 권고");
     }
+    if (pump <= 1) {
+      carbAdjPct += 0.05; // +5%
+      recs.push("펌프감 저하: 탄수 +5% 권고");
+    }
+    if (Math.abs(deltaW) / Math.max(1, weight) > 0.015) {
+      if (deltaW > 0) recs.push("체중 급증(오버스필 가능): 다음 날 탄수 -10% 권고");
+      else recs.push("체중 급감: 다음 날 탄수 +5% 권고");
+    }
+    return { recs, carbAdjPct, naAdjPct };
+  }, [bloat, gi, pump, morningWeightState.value, weight]);
 
-    function App() {
-      const [weight, setWeight] = useState(69.4);
-      const [bf, setBf] = useState(6.6);
-      const LBM = useMemo(()=> weight * (1 - Math.min(Math.max(bf,0),50)/100), [weight, bf]);
-      const protein = useMemo(()=> LBM * 2.6, [LBM]);
-      const carb = useMemo(()=> LBM * 6.0, [LBM]);
-      const fat = useMemo(()=> ((0.2/(1-0.2)) * ((protein*4)+(carb*4)))/9, [protein, carb]);
-      const kcal = protein*4 + carb*4 + fat*9;
+  const carb_g_target = useMemo(() => {
+    if (!applyFeedback) return carb_g_target_raw;
+    return carb_g_target_raw * (1 + feedback.carbAdjPct);
+  }, [applyFeedback, carb_g_target_raw, feedback.carbAdjPct]);
 
-      const macroData = [
-        { name: "탄수", value: carb * 4 },
-        { name: "단백질", value: protein * 4 },
-        { name: "지방", value: fat * 9 },
-      ];
-      const timelineData = [
-        { day: "D-8", C: carb*0.8, P: protein, F: fat*0.9 },
-        { day: "D-7", C: carb*0.8, P: protein, F: fat*0.9 },
-        { day: "D-6", C: carb*0.5, P: protein, F: fat*1.1 },
-        { day: "D-5", C: carb*0.5, P: protein, F: fat*1.1 },
-        { day: "D-4", C: carb*0.5, P: protein, F: fat*1.1 },
-        { day: "D-3", C: carb*0.5, P: protein, F: fat*1.1 },
-        { day: "D-2", C: carb*1.1, P: protein, F: fat*0.9 },
-        { day: "D-1", C: carb*1.2, P: protein, F: fat*0.8 },
-        { day: "D-day", C: carb*0.9, P: protein, F: fat*0.8 },
-      ];
+  // GI 부담 관리(옵션 5) — 자동튜닝
+  useEffect(() => {
+    if (!giAutoTune) return;
+    const score = giWeights.garaetteok * (carbMix.garaetteok/100) + giWeights.rice * (carbMix.rice/100) + giWeights.honey * (carbMix.honey/100);
+    // 점수가 높으면 꿀 ↓, 밥 ↑ 조정 (소폭)
+    let { garaetteok, rice, honey } = carbMix;
+    if (score > 0.35) { rice = clamp(rice + 5, 0, 100); honey = clamp(honey - 5, 0, 100); }
+    setCarbMix({ garaetteok, rice, honey });
+  }, [giAutoTune]);
 
-      return (
-        <div className="w-full min-h-screen bg-slate-50 text-slate-900">
-          <div className="max-w-5xl mx-auto p-6">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 (react-is 포함)</h1>
-            <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
+  const protein_g_target = useMemo(() => LBM * proteinLevel, [LBM, proteinLevel]);
+  const fat_pct = useMemo(() => (customFatPctState.value > 0 ? customFatPctState.value : defaults.fat_pct), [defaults, customFatPctState.value]);
+
+  const Pkcal = protein_g_target * 4;
+  const Ckcal = carb_g_target * 4;
+  const Fkcal = (fat_pct / (1 - fat_pct)) * (Pkcal + Ckcal);
+  const fat_g_target = Fkcal / 9;
+  const total_kcal_target = Pkcal + Ckcal + Fkcal;
+
+  // 수분/전해질 (옵션 8 규칙표 반영)
+  const phaseRule = rulesByDay[phase];
+  const water_ml = phaseRule.water_ml_per_kg * weight;
+  const water_guard = water_ml < minWater_ml_per_kg.value * weight;
+  const sodium_mg = phaseRule.sodium_mg_per_kg * weight;
+  const potassium_mg = Math.round(sodium_mg * 1.2);
+
+  // 탄수 혼합 -> 식품 그램
+  function gramsForCarbFood(foodKey, carbTarget) {
+    const food = FOODS[foodKey];
+    const carb_per_g = food.C / food.unit;
+    if (carb_per_g <= 0) return 0;
+    return carbTarget / carb_per_g;
+  }
+
+  const mixSum = carbMix.garaetteok + carbMix.rice + carbMix.honey;
+  const norm = mixSum === 0 ? { garaetteok: 100, rice: 0, honey: 0 } : {
+    garaetteok: (carbMix.garaetteok / mixSum) * 100,
+    rice: (carbMix.rice / mixSum) * 100,
+    honey: (carbMix.honey / mixSum) * 100,
+  };
+
+  const carbShare = {
+    garaetteok: carb_g_target * (norm.garaetteok / 100),
+    rice: carb_g_target * (norm.rice / 100),
+    honey: carb_g_target * (norm.honey / 100),
+  };
+
+  const gramsCarbFoods = {
+    garaetteok: gramsForCarbFood("garaetteok", carbShare.garaetteok),
+    rice: gramsForCarbFood("rice", carbShare.rice),
+    honey: gramsForCarbFood("honey", carbShare.honey),
+  };
+
+  // 탄수 식품에서의 부가 P/F
+  const PF_from_carbfoods = Object.entries(gramsCarbFoods).reduce((acc, [k, g]) => {
+    const f = FOODS[k];
+    acc.P += (f.P / f.unit) * g;
+    acc.F += (f.F / f.unit) * g;
+    acc.kcal += (f.kcal / f.unit) * g;
+    return acc;
+  }, { P: 0, F: 0, kcal: 0 });
+
+  const remP = Math.max(0, protein_g_target - PF_from_carbfoods.P);
+  const remF = Math.max(0, fat_g_target - PF_from_carbfoods.F);
+
+  const pFood = FOODS[pSource];
+  const fFood = FOODS[fSource];
+  const gramsPfood = pFood.P > 0 ? remP / (pFood.P / pFood.unit) : 0;
+  const gramsFfood = fFood.F > 0 ? remF / (fFood.F / fFood.unit) : 0;
+
+  // === Auto-fix: kcal 오차를 최소화하기 위해 지방 식품 그램을 미세 조정 ===
+  const kcalFromFoods =
+    (FOODS.garaetteok.kcal / FOODS.garaetteok.unit) * gramsCarbFoods.garaetteok +
+    (FOODS.rice.kcal / FOODS.rice.unit) * gramsCarbFoods.rice +
+    (FOODS.honey.kcal / FOODS.honey.unit) * gramsCarbFoods.honey +
+    (pFood.kcal / pFood.unit) * gramsPfood +
+    (fFood.kcal / fFood.unit) * gramsFfood;
+  const kcalDiffAuto = (Pkcal + Ckcal + Fkcal) - kcalFromFoods; // target - current
+  const gramsFfoodAdj = Math.max(0, gramsFfood + (kcalDiffAuto / (fFood.kcal / fFood.unit)));
+
+  const finalTotals = {
+    P: PF_from_carbfoods.P + (pFood.P / pFood.unit) * gramsPfood,
+    C: carb_g_target,
+    F: PF_from_carbfoods.F + (fFood.F / fFood.unit) * gramsFfoodAdj,
+  };
+  const finalKcal = kcalFromMacros(finalTotals);
+
+  // 끼니 배분 — 세션이 있으면 peri 우선 제안
+  const split = useMemo(() => {
+    if (sessions.some(s => s.minutes > 0)) return MEAL_SPLITS.find(m=>m.key==="peri").values;
+    return MEAL_SPLITS.find(m=>m.key===mealSplitKey)?.values || MEAL_SPLITS[0].values;
+  }, [sessions, mealSplitKey]);
+  const mealNames = ["아침", "점심(운동전)", "저녁(운동후)", "간식/무대 전"];
+
+  const meals = mealNames.map((name, i) => {
+    const r = split[i];
+    const g_garae = gramsCarbFoods.garaetteok * r;
+    const g_rice = gramsCarbFoods.rice * r;
+    const g_honey = gramsCarbFoods.honey * r;
+    const g_p = gramsPfood * r;
+    const g_f = gramsFfoodAdj * r;
+
+    const kcal =
+      (FOODS.garaetteok.kcal / FOODS.garaetteok.unit) * g_garae +
+      (FOODS.rice.kcal / FOODS.rice.unit) * g_rice +
+      (FOODS.honey.kcal / FOODS.honey.unit) * g_honey +
+      (pFood.kcal / pFood.unit) * g_p +
+      (fFood.kcal / fFood.unit) * g_f;
+
+    const Na = sodium_mg * r;
+    const K = potassium_mg * r;
+
+    return { name, grams: { garaetteok: g_garae, rice: g_rice, honey: g_honey, pFood: g_p, fFood: g_f }, kcal, Na, K };
+  });
+
+  // D-day 퀵 카브 (무대 전)
+  const [stageTime, setStageTime] = useState("14:00");
+  const quickCarbPlan = useMemo(() => {
+    const totalQuick = weight * 0.3;
+    const times = [90, 45, 15];
+    const shares = [0.5, 0.3, 0.2];
+    const items = times.map((t, idx) => {
+      const gCarb = totalQuick * shares[idx];
+      const honeyCarb = gCarb * 0.7; // 위장 부담 낮춤을 위해 꿀 비중↑
+      const garaeCarb = gCarb * 0.3;
+      const honey_g = gramsForCarbFood("honey", honeyCarb);
+      const garae_g = gramsForCarbFood("garaetteok", garaeCarb);
+      return { tmin: t, honey_g, garae_g, carb: gCarb };
+    });
+    return { totalQuick, items };
+  }, [weight]);
+
+  // ===== 검산 & 안전 가드 =====
+  const checks = [];
+  const kcalDiffPct = (finalKcal - total_kcal_target) / Math.max(1, total_kcal_target);
+  if (Math.abs(kcalDiffPct) > 0.02) checks.push({ level: "warn", msg: "최종 kcal이 이론값과 2% 이상 차이. 식품/라운딩 확인." });
+  if (water_guard) checks.push({ level: "warn", msg: `물 섭취가 최저 가드레일(${minWater_ml_per_kg.value} mL/kg) 미만입니다.` });
+
+  // ===== YAZIO 텍스트/CSV/JSON 내보내기 =====
+  function buildYazioText() {
+    const lines = [];
+    meals.forEach((m)=>{
+      lines.push(`${m.name}: 가래떡 ${round2(m.grams.garaetteok)}g, 흰밥 ${round2(m.grams.rice)}g, 밤꿀 ${round2(m.grams.honey)}g, ${FOODS[pSource].name} ${round2(m.grams.pFood)}g, ${FOODS[fSource].name} ${round2(m.grams.fFood)}g — ${round2(m.kcal)}kcal`);
+    });
+    lines.push(`합계: P ${round2(finalTotals.P)}g, C ${round2(finalTotals.C)}g, F ${round2(finalTotals.F)}g, ${round2(finalKcal)}kcal`);
+    return lines.join("\n");
+  }
+  function download(filename, text) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type: 'text/plain'}));
+    a.download = filename;
+    a.click();
+  }
+  function exportCSV() {
+    const header = ["meal","garaetteok_g","rice_g","honey_g","protein_g","fat_g","kcal","Na_mg","K_mg"].join(",");
+    const rows = meals.map(m=> [m.name, m.grams.garaetteok, m.grams.rice, m.grams.honey, m.grams.pFood, m.grams.fFood, m.kcal, m.Na, m.K].join(","));
+    download("peakweek_v12.csv", [header, ...rows].join("\n"));
+  }
+  function exportJSON() {
+    const obj = { inputs: { weight, bf, dayKey, profile, proteinLevel, carbMix, mealSplitKey, pSource, fSource }, totals: finalTotals, kcal: finalKcal, meals, rulesByDay };
+    download("peakweek_v12.json", JSON.stringify(obj, null, 2));
+  }
+  function saveSnapshot() {
+    const snap = { ts: new Date().toISOString(), inputs: { weight, bf, dayKey, profile, proteinLevel, carbMix, mealSplitKey, pSource, fSource }, totals: finalTotals };
+    const next = [snap, ...snapshots].slice(0, 20);
+    setSnapshots(next);
+    localStorage.setItem("ppk_v12_snapshots", JSON.stringify(next));
+  }
+
+  // ===== 시각화 데이터 준비 =====
+  const macroData = [
+    { name: "탄수", value: finalTotals.C * 4 },
+    { name: "단백질", value: finalTotals.P * 4 },
+    { name: "지방", value: finalTotals.F * 9 },
+  ];
+  const COLORS = ["#60a5fa", "#34d399", "#f59e0b"]; // 기본 색(지정) — 시각적 구분
+
+  const timelineData = DAY_OPTIONS.map((opt)=>{
+    const ph = phaseForDay(opt.key);
+    const dflt = defaultsByPhase(ph, profile);
+    const gPer = dflt.carb_g_per;
+    const cKind = dflt.carbKind;
+    const C = (cKind === "perLBM" ? LBM : weight) * gPer;
+    const P = LBM * proteinLevel;
+    const Pk = P * 4, Ck = C * 4, Fk = (dflt.fat_pct / (1 - dflt.fat_pct)) * (Pk + Ck);
+    const F = Fk / 9;
+    return { day: opt.label, C, P, F, kcal: Pk + Ck + Fk };
+  });
+
+  const glycogenWaterSeries = timelineData.map(d=> ({ day: d.day, gw: d.C * 0.003 }));
+
+  const naGauge = [{ name: "Na", value: sodium_mg, fill: "#60a5fa" }];
+  const kGauge  = [{ name: "K", value: potassium_mg, fill: "#34d399" }];
+
+  // ===== 드래그 정렬 (섹션 재배치) =====
+  const [order, setOrder] = useState([
+    "inputs", "mix", "sources", "split_stage", "summary", "meals", "quickcarb", "diagnostics", "week", "viz", "options", "export",
+  ]);
+  const dragId = useRef(null);
+  function onDragStart(id) { dragId.current = id; }
+  function onDragOver(e) { e.preventDefault(); }
+  function onDrop(id) {
+    const from = order.indexOf(dragId.current);
+    const to = order.indexOf(id);
+    if (from===-1 || to===-1) return;
+    const next = [...order];
+    const [moved] = next.splice(from,1);
+    next.splice(to,0,moved);
+    setOrder(next);
+  }
+
+  // ===== UI 조각 =====
+  const Section = ({ id, title, children }) => (
+    <section
+      draggable
+      onDragStart={()=>onDragStart(id)}
+      onDragOver={onDragOver}
+      onDrop={()=>onDrop(id)}
+      className="bg-white rounded-2xl shadow p-4 mt-4 border"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="font-semibold mb-2">{title}</h2>
+        <span className="text-xs text-slate-400 select-none">⇅ 드래그로 순서 변경</span>
+      </div>
+      {children}
+    </section>
+  );
+
+  // ===== 렌더 =====
+  return (
+    <div className="w-full min-h-screen bg-slate-50 text-slate-900">
+      <div className="max-w-7xl mx-auto p-6">
+        <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 (옵션·시각화·드래그 정렬 추가)</h1>
+        <p className="text-xs text-slate-500 mt-1">v1.1은 그대로 유지됩니다. 이 버전은 확장 기능만 추가한 별도 파일입니다.</p>
+
+        {order.map((id)=>{
+          if (id === "inputs") return (
+            <Section key={id} id={id} title="신체 입력 / 일·프로파일 / 커스텀">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div><label className="block text-sm mb-1">체중 (kg)</label><input className="w-full border rounded-xl px-3 py-2" value={weight} onChange={e=>setWeight(parseFloat(e.target.value||0))} /></div>
-                <div><label className="block text-sm mb-1">체지방률 (%)</label><input className="w-full border rounded-xl px-3 py-2" value={bf} onChange={e=>setBf(parseFloat(e.target.value||0))} /></div>
-                <div className="text-sm bg-slate-50 rounded-xl p-3">LBM 추정: <b>{(LBM).toFixed(2)} kg</b><br/>총 열량: <b>{(kcal).toFixed(0)} kcal</b></div>
+                <div>
+                  <NumericField label="체중 (kg)" state={weightState} step="0.1" />
+                  <div className="h-3" />
+                  <NumericField label="체지방률 (%)" state={bfState} step="0.1" />
+                  <div className="text-xs text-slate-500 mt-2">추정 LBM: <b>{round2(LBM)} kg</b></div>
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">대회 기준 일자</label>
+                  <select value={dayKey} onChange={(e)=>setDayKey(parseInt(e.target.value))} className="w-full border rounded-xl px-3 py-2">
+                    {DAY_OPTIONS.map(d=> <option key={d.key} value={d.key}>{d.label}</option>)}
+                  </select>
+                  <label className="block text-sm mt-3 mb-1">전략 강도(프로파일)</label>
+                  <select value={profile} onChange={(e)=>setProfile(e.target.value)} className="w-full border rounded-xl px-3 py-2">
+                    {PROFILE_OPTIONS.map(p=> <option key={p.key} value={p.key}>{p.label} — {p.hint}</option>)}
+                  </select>
+                  <label className="block text-sm mt-3 mb-1">단백질 수준</label>
+                  <select value={proteinLevel} onChange={(e)=>setProteinLevel(parseFloat(e.target.value))} className="w-full border rounded-xl px-3 py-2">
+                    {PROTEIN_LEVELS.map(p=> <option key={p.key} value={p.key}>{p.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <NumericField label="커스텀 탄수 (g/kg) — 0이면 기본" state={customCarbState} step="0.1" />
+                  <div className="h-3" />
+                  <NumericField label="커스텀 지방 비율 (예: 0.2 = 20%) — 0이면 기본" state={customFatPctState} step="0.01" />
+                  <div className="text-xs text-slate-500 mt-2">단계: <b>{labelForPhase(phase)}</b></div>
+                </div>
               </div>
-            </section>
-            <ChartsSection macroData={macroData} timelineData={timelineData} />
-          </div>
-        </div>
-      );
-    }
+            </Section>
+          );
 
-    const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
-  </script>
-</body>
+          if (id === "mix") return (
+            <Section key={id} id={id} title="탄수 혼합비 / GI 프리셋 / GI 부담 관리">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  {["garaetteok","rice","honey"].map((k)=> (
+                    <div key={k} className="flex items-center gap-2 mb-2">
+                      <label className="w-28 text-sm">{FOODS[k].name}</label>
+                      <input
+                        inputMode="numeric"
+                        className="border rounded-xl px-3 py-1 w-28"
+                        value={String(carbMix[k])}
+                        onChange={(e)=>{
+                          const raw = e.target.value.replace(/[^0-9]/g, "");
+                          const clean = raw.replace(/^0+(?=\d)/, "");
+                          const n = clamp(parseInt(clean || "0"), 0, 100);
+                          setCarbMix({ ...carbMix, [k]: n });
+                        }}
+                      />
+                      <span className="text-xs text-slate-500">%</span>
+                    </div>
+                  ))}
+                  <div className="text-xs text-slate-500">합계 {round2(carbMix.garaetteok+carbMix.rice+carbMix.honey)}% (자동 정규화)</div>
+
+                  <div className="mt-3 p-2 rounded-xl bg-slate-50">
+                    <div className="text-sm font-semibold mb-2">GI 전략 프리셋</div>
+                    <div className="flex items-center gap-2">
+                      <select className="border rounded-xl px-3 py-2" id="giPreset">
+                        <option value="low">낮음(위장 부담 최소화)</option>
+                        <option value="neutral">기본</option>
+                        <option value="high">높음(빠른 충전)</option>
+                      </select>
+                      <button className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200" onClick={()=>{
+                        const el = document.getElementById('giPreset');
+                        const val = el.value;
+                        if (val === 'low') setCarbMix({ garaetteok: 35, rice: 55, honey: 10 });
+                        else if (val === 'high') setCarbMix({ garaetteok: 55, rice: 25, honey: 20 });
+                        else setCarbMix({ garaetteok: 60, rice: 30, honey: 10 });
+                      }}>적용</button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-slate-50">
+                  <div className="text-sm font-semibold mb-2">GI 부담 관리(가중치/자동튜닝)</div>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    {Object.keys(giWeights).map(k=> (
+                      <div key={k}>
+                        <div className="mb-1">{FOODS[k].name}</div>
+                        <input type="range" min={0} max={1} step={0.05} value={giWeights[k]} onChange={(e)=> setGiWeights({...giWeights, [k]: parseFloat(e.target.value)})} />
+                        <div>{giWeights[k]}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex items-center gap-2">
+                    <input id="giauto" type="checkbox" checked={giAutoTune} onChange={(e)=>setGiAutoTune(e.target.checked)} />
+                    <label htmlFor="giauto" className="text-sm">자동 튜닝 활성화</label>
+                  </div>
+                  <div className="text-xs text-slate-500 mt-1">* 점수↑ → 꿀↓, 밥↑로 미세 조정</div>
+                </div>
+              </div>
+            </Section>
+          );
+
+          if (id === "sources") return (
+            <Section key={id} id={id} title="단백질/지방 식품 선택 & 세션 연동(옵션 4)">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm mb-1">단백질원</label>
+                  <select value={pSource} onChange={(e)=>setPSource(e.target.value)} className="w-full border rounded-xl px-3 py-2 mb-3">
+                    {P_SOURCES.map(o=> <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </select>
+                  <label className="block text-sm mb-1">지방원</label>
+                  <select value={fSource} onChange={(e)=>setFSource(e.target.value)} className="w-full border rounded-xl px-3 py-2">
+                    {F_SOURCES.map(o=> <option key={o.key} value={o.key}>{o.label}</option>)}
+                  </select>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50">
+                  <div className="text-sm font-semibold mb-2">세션 입력(AM/PM)</div>
+                  {sessions.map((s,idx)=> (
+                    <div key={s.id} className="grid grid-cols-4 gap-2 items-center mb-2">
+                      <div className="text-xs">{s.id}</div>
+                      <select value={s.type} onChange={(e)=>{
+                        const v = e.target.value; const next = [...sessions]; next[idx] = {...s, type: v}; setSessions(next);
+                      }} className="border rounded px-2 py-1 text-sm">
+                        {['하체','상체','전신'].map(t=> <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <input className="border rounded px-2 py-1 text-sm" value={s.minutes} onChange={(e)=>{
+                        const v = parseInt(e.target.value||'0'); const next = [...sessions]; next[idx] = {...s, minutes: clamp(v,0,240)}; setSessions(next);
+                      }} />
+                      <select value={s.RPE} onChange={(e)=>{
+                        const v = parseInt(e.target.value); const next = [...sessions]; next[idx] = {...s, RPE: v}; setSessions(next);
+                      }} className="border rounded px-2 py-1 text-sm">
+                        {[6,7,8,9].map(n=> <option key={n} value={n}>RPE {n}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Section>
+          );
+
+          if (id === "split_stage") return (
+            <Section key={id} id={id} title="끼니 배분 & D-day 무대">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm mb-1">배분 프로파일</label>
+                  <select value={mealSplitKey} onChange={(e)=>setMealSplitKey(e.target.value)} className="w-full border rounded-xl px-3 py-2">
+                    {MEAL_SPLITS.map(m=> <option key={m.key} value={m.key}>{m.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm mb-1">D-day 무대 시간</label>
+                  <input type="time" value={stageTime} onChange={(e)=>setStageTime(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
+                  <div className="text-xs text-slate-500 mt-1">무대 90/45/15분 전 퀵카브 가이드 생성</div>
+                </div>
+                <div className="text-xs text-slate-500">세션이 있으면 자동으로 운동 전후 집중 배분을 우선 적용합니다.</div>
+              </div>
+            </Section>
+          );
+
+          if (id === "summary") return (
+            <Section key={id} id={id} title="권장 섭취량 (하루) & 전해질">
+              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
+                <Box label="단계" value={labelForPhase(phase)} />
+                <Box label="탄수" value={`${round2(carb_g_target)} g`} />
+                <Box label="단백질" value={`${round2(protein_g_target)} g`} />
+                <Box label="지방" value={`${round2(finalTotals.F)} g`} />
+                <Box label="총 열량" value={`${round2(finalKcal)} kcal`} />
+                <Box label="수분(권장)" value={`${round2(water_ml/1000)} L`} warn={water_guard} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm mt-3">
+                <div className="bg-blue-50 rounded-xl p-3"><div className="text-blue-700">나트륨(권장)</div><div className="font-semibold">{Math.round(sodium_mg)} mg</div><div className="text-xs text-blue-700 mt-1">칼륨(추정): {potassium_mg} mg</div></div>
+                <div className="bg-slate-50 rounded-xl p-3"><div className="text-slate-700">탄수 식품 그램</div>
+                  <div>가래떡: <b>{round2(gramsCarbFoods.garaetteok)} g</b></div>
+                  <div>흰쌀밥: <b>{round2(gramsCarbFoods.rice)} g</b></div>
+                  <div>밤꿀: <b>{round2(gramsCarbFoods.honey)} g</b></div>
+                </div>
+                <div className="bg-amber-50 rounded-xl p-3"><div className="text-amber-700">YAZIO 모드</div>
+                  <div className="flex items-center gap-2 mt-1"><input type="checkbox" checked={yazioMode} onChange={(e)=>setYazioMode(e.target.checked)} /><span className="text-sm">활성화</span></div>
+                  {yazioMode && (
+                    <div className="grid grid-cols-4 gap-2 mt-2 text-xs">
+                      <Field label="tol C (g)" state={tolC} />
+                      <Field label="tol P (g)" state={tolP} />
+                      <Field label="tol F (g)" state={tolF} />
+                      <Field label="tol kcal" state={tolKcal} step="1" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Section>
+          );
+
+          if (id === "meals") return (
+            <Section key={id} id={id} title="하루 4끼 식단 + 전해질">
+              <TableMeals meals={meals} pSource={pSource} fSource={fSource} />
+            </Section>
+          );
+
+          if (id === "quickcarb") return (
+            <Section key={id} id={id} title="D-day 퀵 카브 플랜">
+              <div className="text-sm">총 퀵카브 권장: <b>{round2(quickCarbPlan.totalQuick)} g</b> (≈ 0.3 g/kg)</div>
+              <table className="w-full text-sm mt-2">
+                <thead><tr className="text-left text-slate-500"><th className="py-2">시점</th><th>밤꿀(g)</th><th>가래떡(g)</th><th>탄수 합(g)</th></tr></thead>
+                <tbody>
+                  {quickCarbPlan.items.map(it=> (
+                    <tr key={it.tmin} className="border-t"><td className="py-2">{it.tmin}분 전</td><td>{round2(it.honey_g)}</td><td>{round2(it.garae_g)}</td><td>{round2(it.carb)}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+          );
+
+          if (id === "diagnostics") return (
+            <Section key={id} id={id} title="검산/진단 & 피드백 루프">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                <Box label="이론 kcal" value={`${round2(total_kcal_target)} kcal`} />
+                <Box label="식품 합 kcal" value={`${round2(finalKcal)} kcal`} />
+                <Box label="차이" value={`${round2((finalKcal-total_kcal_target))} kcal (${round2(((finalKcal-total_kcal_target)/Math.max(1,total_kcal_target))*100)}%)`} />
+              </div>
+              <ul className="mt-3 text-sm">
+                {checks.length===0 ? <li className="px-3 py-2 bg-emerald-50 text-emerald-700 rounded-xl">✅ 오류 없음</li> : checks.map((c,i)=>(<li key={i} className={`px-3 py-2 rounded-xl ${c.level==='warn'? 'bg-amber-50 text-amber-700':'bg-slate-50 text-slate-700'}`}>• {c.msg}</li>))}
+              </ul>
+
+              <div className="mt-4 p-3 rounded-xl bg-slate-50">
+                <div className="text-sm font-semibold mb-2">체중/컨디션 입력(옵션 2)</div>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
+                  <Field label="아침 체중(kg)" state={morningWeightState} />
+                  <Select label="복부팽만" value={bloat} onChange={setBloat} options={[0,1,2,3,4,5]} />
+                  <Select label="소화불편" value={gi} onChange={setGi} options={[0,1,2,3,4,5]} />
+                  <Select label="펌프감" value={pump} onChange={setPump} options={[0,1,2,3,4,5]} />
+                </div>
+                <div className="mt-2 text-xs text-slate-600">권고: {feedback.recs.length? feedback.recs.join(' · '): '현재 특이사항 없음'}</div>
+                <div className="mt-2 flex items-center gap-2"><input id="applyfb" type="checkbox" checked={applyFeedback} onChange={(e)=>setApplyFeedback(e.target.checked)} /><label htmlFor="applyfb" className="text-sm">오늘 값에 적용</label></div>
+              </div>
+            </Section>
+          );
+
+          if (id === "week") return (
+            <Section key={id} id={id} title="D-8 ~ D-day 주간 미리보기">
+              <TableWeek profile={profile} proteinLevel={proteinLevel} LBM={LBM} weight={weight} />
+            </Section>
+          );
+
+          if (id === "viz") return (
+            <Section key={id} id={id} title="시각화 대시보드">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card title="오늘 매크로 도넛 (kcal 기준)">
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie data={macroData} dataKey="value" nameKey="name" outerRadius={90} label>
+                        {macroData.map((e,i)=> <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </Card>
+                <Card title="D-8→D-day 매크로 타임라인 (g)">
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={timelineData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="day" hide={false} />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="C" name="탄수(g)" fill="#60a5fa" stackId="a" />
+                      <Bar dataKey="P" name="단백질(g)" fill="#34d399" stackId="a" />
+                      <Bar dataKey="F" name="지방(g)" fill="#f59e0b" stackId="a" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </Card>
+                <Card title="글리코겐 결합수 추정 (L)">
+                  <ResponsiveContainer width="100%" height={220}>
+                    <LineChart data={glycogenWaterSeries}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="day" hide={false} />
+                      <YAxis />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="gw" name="결합수(L)" stroke="#60a5fa" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </Card>
+                <Card title="Na/K 게이지">
+                  <div className="grid grid-cols-2">
+                    <ResponsiveContainer width="100%" height={220}>
+                      <RadialBarChart innerRadius="60%" outerRadius="100%" data={naGauge} startAngle={180} endAngle={0}>
+                        <RadialBar minAngle={15} background clockWise dataKey="value" />
+                        <Legend />
+                      </RadialBarChart>
+                    </ResponsiveContainer>
+                    <ResponsiveContainer width="100%" height={220}>
+                      <RadialBarChart innerRadius="60%" outerRadius="100%" data={kGauge} startAngle={180} endAngle={0}>
+                        <RadialBar minAngle={15} background clockWise dataKey="value" />
+                        <Legend />
+                      </RadialBarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Card>
+              </div>
+            </Section>
+          );
+
+          if (id === "options") return (
+            <Section key={id} id={id} title="옵션(가드레일·규칙표·보충제)">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-3 rounded-xl bg-slate-50">
+                  <div className="text-sm font-semibold mb-2">물 섭취 가드레일</div>
+                  <Field label="최저선 mL/kg" state={minWater_ml_per_kg} step="1" />
+                  {water_guard && <div className="mt-2 text-xs text-amber-700">경고: 현재 권장치가 최저선 미만</div>}
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50">
+                  <div className="text-sm font-semibold mb-2">날짜별 규칙표 (kg당)</div>
+                  {Object.entries(rulesByDay).map(([k,v])=> (
+                    <div key={k} className="grid grid-cols-3 gap-2 items-end mb-2 text-xs">
+                      <div className="font-medium">{labelForPhase(k)}</div>
+                      <input className="border rounded px-2 py-1" value={v.water_ml_per_kg} onChange={(e)=> setRulesByDay({ ...rulesByDay, [k]: { ...v, water_ml_per_kg: clamp(parseInt(e.target.value||'0'), 10, 80) } })} />
+                      <input className="border rounded px-2 py-1" value={v.sodium_mg_per_kg} onChange={(e)=> setRulesByDay({ ...rulesByDay, [k]: { ...v, sodium_mg_per_kg: clamp(parseInt(e.target.value||'0'), 10, 100) } })} />
+                      <div className="col-span-3 text-[11px] text-slate-500">물(mL/kg), Na(mg/kg)</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50">
+                  <div className="text-sm font-semibold mb-2">보충제 스케줄러</div>
+                  {suppPlan.map((s,idx)=> (
+                    <div key={idx} className="grid grid-cols-5 gap-2 items-center text-xs mb-2">
+                      <input type="checkbox" checked={s.enable} onChange={(e)=>{ const next=[...suppPlan]; next[idx] = {...s, enable:e.target.checked}; setSuppPlan(next); }} />
+                      <div className="col-span-2">{s.name}</div>
+                      <div className="col-span-2">{s.timing} — {s.note}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Section>
+          );
+
+          if (id === "export") return (
+            <Section key={id} id={id} title="내보내기 / 스냅샷">
+              <div className="flex flex-wrap gap-2 text-sm">
+                <button className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200" onClick={()=> download("peakweek_yazio.txt", buildYazioText())}>YAZIO용 텍스트</button>
+                <button className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200" onClick={exportCSV}>CSV</button>
+                <button className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200" onClick={exportJSON}>JSON</button>
+                <button className="px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200" onClick={saveSnapshot}>스냅샷 저장</button>
+              </div>
+              <div className="mt-3 text-xs">
+                <div className="font-semibold mb-1">스냅샷 (최근 20개)</div>
+                <ul className="space-y-1">
+                  {snapshots.map((s, i)=> (
+                    <li key={i} className="px-2 py-1 rounded bg-slate-100">{s.ts} — P{round2(s.totals.P)} C{round2(s.totals.C)} F{round2(s.totals.F)}</li>
+                  ))}
+                </ul>
+              </div>
+            </Section>
+          );
+
+          return null;
+        })}
+
+        <div className="text-[11px] text-slate-500 mt-6">
+          <p>주의: 피크위크는 개인 반응 차가 큽니다. 본 도구는 기본값/검산/가드레일 제공을 목적으로 하며, 실제 적용 시 컨디션·인바디 업데이트를 반영해 미세 조정하세요.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============ 보조 컴포넌트들 ============
+function Box({ label, value, warn }) {
+  return (
+    <div className={`rounded-xl p-3 ${warn? 'bg-amber-50 text-amber-700':'bg-slate-50'}`}>
+      <div className="text-slate-500 text-sm">{label}</div>
+      <div className="font-semibold">{value}</div>
+    </div>
+  );
+}
+function Field({ label, state, step }) {
+  return (
+    <div>
+      <label className="block text-xs mb-1">{label}</label>
+      <input className="w-full border rounded px-2 py-1 text-sm" value={state.str} onChange={state.onChange} onBlur={state.onBlur} step={step||"0.1"} />
+    </div>
+  );
+}
+function Select({ label, value, onChange, options }) {
+  return (
+    <div>
+      <label className="block text-xs mb-1">{label}</label>
+      <select className="w-full border rounded px-2 py-1 text-sm" value={value} onChange={(e)=>onChange(parseInt(e.target.value))}>
+        {options.map(o=> <option key={o} value={o}>{o}</option>)}
+      </select>
+    </div>
+  );
+}
+function Card({ title, children }) {
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="font-semibold mb-2">{title}</div>
+      {children}
+    </div>
+  );
+}
+function TableMeals({ meals, pSource, fSource }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-slate-500">
+            <th className="py-2">끼니</th>
+            <th>가래떡 (g)</th>
+            <th>흰쌀밥 (g)</th>
+            <th>밤꿀 (g)</th>
+            <th>{FOODS[pSource].name} (g)</th>
+            <th>{FOODS[fSource].name} (g)</th>
+            <th>Na (mg)</th>
+            <th>K (mg)</th>
+            <th>kcal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {meals.map((m)=> (
+            <tr key={m.name} className="border-t">
+              <td className="py-2 font-medium">{m.name}</td>
+              <td>{round2(m.grams.garaetteok)}</td>
+              <td>{round2(m.grams.rice)}</td>
+              <td>{round2(m.grams.honey)}</td>
+              <td>{round2(m.grams.pFood)}</td>
+              <td>{round2(m.grams.fFood)}</td>
+              <td>{round2(m.Na)}</td>
+              <td>{round2(m.K)}</td>
+              <td>{round2(m.kcal)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+function TableWeek({ profile, proteinLevel, LBM, weight }) {
+  const rows = DAY_OPTIONS.map((opt) => {
+    const ph = phaseForDay(opt.key);
+    const dflt = defaultsByPhase(ph, profile);
+    const gPer = dflt.carb_g_per;
+    const cKind = dflt.carbKind;
+    const carb = (cKind === "perLBM" ? LBM : weight) * gPer;
+    const P = LBM * proteinLevel;
+    const Pk = P * 4, Ck = carb * 4, Fk = (dflt.fat_pct / (1 - dflt.fat_pct)) * (Pk + Ck);
+    const F = Fk / 9;
+    const K = Pk + Ck + Fk;
+    return { day: opt.label, phase: labelForPhase(ph), P, C: carb, F, K };
+  });
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-slate-500">
+            <th className="py-2">일자</th>
+            <th>단계</th>
+            <th>탄수(g)</th>
+            <th>단백질(g)</th>
+            <th>지방(g)</th>
+            <th>총 kcal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((d)=> (
+            <tr key={d.day} className="border-t">
+              <td className="py-2">{d.day}</td>
+              <td>{d.phase}</td>
+              <td>{round2(d.C)}</td>
+              <td>{round2(d.P)}</td>
+              <td>{round2(d.F)}</td>
+              <td>{round2(d.K)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<PeakWeekCalculator_V12 />);
+    </script>
+  </body>
 </html>
