@@ -3,18 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>피크위크 계산기 — v1.2 (로컬 Recharts, 로드 순서 수정)</title>
+  <title>피크위크 계산기 — v1.2 (Recharts + react-is UMD 포함)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>html,body{height:100%}body{background:#f8fafc}.notice{background:#fff3cd;color:#7c6200;border:1px solid #ffe69c;border-radius:12px;padding:10px 12px;font-size:14px}</style>
 
-  <!-- 0) React 먼저 로드 (Recharts가 전역 React 참조) -->
+  <!-- 0) React 먼저 (Recharts가 전역 React 참조) -->
   <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 
-  <!-- 1) 로컬 vendored Recharts 우선 (전역 React 존재 보장) -->
+  <!-- 1) react-is UMD (Recharts가 내부적으로 참조) -->
+  <!-- 로컬 vendoring을 원하면 ./vendor/react-is.production.min.js 로 교체하세요. -->
+  <script src="https://cdn.jsdelivr.net/npm/react-is/umd/react-is.production.min.js" crossorigin></script>
+
+  <!-- 2) 로컬 vendored Recharts 우선 -->
   <script src="./vendor/Recharts.min.js"></script>
 
-  <!-- 2) 로컬 실패 시 CDN 폴백 -->
+  <!-- 3) 로컬 실패 시 CDN 폴백 -->
   <script>
     (function ensureRecharts(){
       if (window.Recharts) return; // local worked
@@ -33,7 +37,7 @@
     })();
   </script>
 
-  <!-- 3) Babel (in-browser JSX 변환) -->
+  <!-- 4) Babel (in-browser JSX) -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -118,7 +122,7 @@
       return (
         <div className="w-full min-h-screen bg-slate-50 text-slate-900">
           <div className="max-w-5xl mx-auto p-6">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 (로컬 Recharts, 순서수정)</h1>
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 (react-is 포함)</h1>
             <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div><label className="block text-sm mb-1">체중 (kg)</label><input className="w-full border rounded-xl px-3 py-2" value={weight} onChange={e=>setWeight(parseFloat(e.target.value||0))} /></div>
