@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>피크위크 계산기 — v1.2 (로컬 Recharts 사용)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>html,body{height:100%}body{background:#f8fafc}.notice{background:#fff3cd;color:#7c6200;border:1px solid #ffe69c;border-radius:12px;padding:10px 12px;font-size:14px}</style>
+
+  <!-- 1) Try LOCAL vendored Recharts first (no network needed) -->
+  <script src="./vendor/Recharts.min.js"></script>
+
+  <!-- 2) If local load fails, attempt CDN fallbacks -->
+  <script>
+    (function ensureRecharts(){
+      if (window.Recharts) return; // local worked
+      var triedJsDelivr = false;
+      function inject(src) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = function(){ window.__RECHARTS_READY__ = true; };
+        s.onerror = function(){
+          if (!triedJsDelivr) { triedJsDelivr = true; inject('https://unpkg.com/recharts/umd/Recharts.min.js'); }
+          else { window.__RECHARTS_FAILED__ = true; }
+        };
+        document.head.appendChild(s);
+      }
+      inject('https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js');
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React 18 / ReactDOM 18 from jsDelivr (can also be vendored locally if needed) -->
+  <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel" data-presets="env,react">
+    const { useMemo, useState } = React;
+
+    function ChartsSection({ macroData, timelineData }) {
+      if (!window.Recharts) {
+        return <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
+          <div className="font-semibold mb-2">시각화 대시보드</div>
+          <div className="notice">Recharts 로드 실패: <b>./vendor/Recharts.min.js</b> 를 저장소에 추가하거나, 네트워크에서 jsDelivr/unpkg 허용 후 다시 시도하세요.</div>
+        </section>;
+      }
+      const { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid } = window.Recharts;
+      const COLORS = ["#60a5fa", "#34d399", "#f59e0b"];
+      return (
+        <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-2xl border bg-white p-4">
+              <div className="font-semibold mb-2">오늘 매크로 도넛 (kcal 기준)</div>
+              <div style={{ width: "100%", height: 240 }}>
+                <ResponsiveContainer width="100%" height={240}>
+                  <PieChart>
+                    <Pie data={macroData} dataKey="value" nameKey="name" outerRadius={90} label>
+                      {macroData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className="rounded-2xl border bg-white p-4">
+              <div className="font-semibold mb-2">D-8→D-day 매크로 타임라인 (g)</div>
+              <div style={{ width: "100%", height: 260 }}>
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={timelineData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="day" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="C" name="탄수(g)" fill="#60a5fa" stackId="a" />
+                    <Bar dataKey="P" name="단백질(g)" fill="#34d399" stackId="a" />
+                    <Bar dataKey="F" name="지방(g)" fill="#f59e0b" stackId="a" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </section>
+      );
+    }
+
+    function App() {
+      const [weight, setWeight] = useState(69.4);
+      const [bf, setBf] = useState(6.6);
+      const LBM = useMemo(()=> weight * (1 - Math.min(Math.max(bf,0),50)/100), [weight, bf]);
+      const protein = useMemo(()=> LBM * 2.6, [LBM]);
+      const carb = useMemo(()=> LBM * 6.0, [LBM]);
+      const fat = useMemo(()=> ((0.2/(1-0.2)) * ((protein*4)+(carb*4)))/9, [protein, carb]);
+      const kcal = protein*4 + carb*4 + fat*9;
+
+      const macroData = [
+        { name: "탄수", value: carb * 4 },
+        { name: "단백질", value: protein * 4 },
+        { name: "지방", value: fat * 9 },
+      ];
+      const timelineData = [
+        { day: "D-8", C: carb*0.8, P: protein, F: fat*0.9 },
+        { day: "D-7", C: carb*0.8, P: protein, F: fat*0.9 },
+        { day: "D-6", C: carb*0.5, P: protein, F: fat*1.1 },
+        { day: "D-5", C: carb*0.5, P: protein, F: fat*1.1 },
+        { day: "D-4", C: carb*0.5, P: protein, F: fat*1.1 },
+        { day: "D-3", C: carb*0.5, P: protein, F: fat*1.1 },
+        { day: "D-2", C: carb*1.1, P: protein, F: fat*0.9 },
+        { day: "D-1", C: carb*1.2, P: protein, F: fat*0.8 },
+        { day: "D-day", C: carb*0.9, P: protein, F: fat*0.8 },
+      ];
+
+      return (
+        <div className="w-full min-h-screen bg-slate-50 text-slate-900">
+          <div className="max-w-5xl mx-auto p-6">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 (로컬 Recharts)</h1>
+            <section className="bg-white rounded-2xl shadow p-4 mt-4 border">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div><label className="block text-sm mb-1">체중 (kg)</label><input className="w-full border rounded-xl px-3 py-2" value={weight} onChange={e=>setWeight(parseFloat(e.target.value||0))} /></div>
+                <div><label className="block text-sm mb-1">체지방률 (%)</label><input className="w-full border rounded-xl px-3 py-2" value={bf} onChange={e=>setBf(parseFloat(e.target.value||0))} /></div>
+                <div className="text-sm bg-slate-50 rounded-xl p-3">LBM 추정: <b>{(LBM).toFixed(2)} kg</b><br/>총 열량: <b>{(kcal).toFixed(0)} kcal</b></div>
+              </div>
+            </section>
+            <ChartsSection macroData={macroData} timelineData={timelineData} />
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
