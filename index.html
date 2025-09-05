@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>피크위크 계산기 — v1.2 (통합 + 카보로딩, 1소수표기)</title>
-  <meta name="description" content="v1.1 계산 로직 + v1.2 시각화 + 카보로딩 최적 조합 프리셋, 모든 수치 소수점 첫째자리 표기" />
+  <title>피크위크 계산기 — v1.2 (통합 + 카보로딩 + 전해질/수분, 1소수표기)</title>
+  <meta name="description" content="v1.1 계산 + v1.2 시각화 + 카보로딩 프리셋 + 전해질/수분 추적. 모든 수치 소수점 1자리 표기." />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html,body{height:100%}
@@ -19,6 +19,8 @@
     .warn{color:#ca8a04}
     .err{color:#dc2626}
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+    input[type=number]{appearance:textfield;-moz-appearance:textfield}
+    input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{appearance:none;margin:0}
   </style>
 
   <!-- React / ReactDOM -->
@@ -61,6 +63,7 @@
     const r1 = n => Math.round((+n)*10)/10; // ensure numeric then 1-decimal
     const clamp = (n, min, max) => Math.min(Math.max(n, min), max);
     const round5 = n => Math.round(n/5)*5;
+    const num = (s, d=0) => { const v = parseFloat(s); return isNaN(v) ? d : v; };
 
     // ---------- 옵션 ----------
     const DAY_OPTIONS = [
@@ -154,7 +157,6 @@
 
       // 공통 포맷터(1소수)
       const fmt = v => r1(v);
-      const fmtG = v => r1(v) + " g";
       const fmtK = v => r1(v) + " kcal";
 
       return (
@@ -203,28 +205,35 @@
 
     // ---------- 메인 ----------
     function App(){
-      // 입력
-      const [weight, setWeight] = useState(69.4);
-      const [bf, setBf] = useState(6.6);
+      // 입력 (문자열로 보관: 0을 지우는 문제 해결)
+      const [weightStr, setWeightStr] = useState("69.4");
+      const [bfStr, setBfStr] = useState("6.6");
       const [dayKey, setDayKey] = useState(-8);
       const [profile, setProfile] = useState("standard");
-      const [proteinLevel, setProteinLevel] = useState(2.6);
+      const [proteinLevelStr, setProteinLevelStr] = useState("2.6");
 
-      // 플래너(식단) - g 단위
+      // 전해질/수분 (문자열 상태 유지)
+      const [saltGramStr, setSaltGramStr] = useState("0");     // 소금 g (1 g ≈ 393 mg Na)
+      const [sodiumExtraStr, setSodiumExtraStr] = useState("0");// 추가 Na mg (가공식품 등)
+      const [potassiumStr, setPotassiumStr] = useState("0");    // K mg
+      const [magnesiumStr, setMagnesiumStr] = useState("0");    // Mg mg
+      const [waterMlStr, setWaterMlStr] = useState("0");        // ml
+
+      // 플래너(식단) - g 단위 (문자열)
       const [plan, setPlan] = useState({
-        garaetteok: 200,
-        rice: 300,
-        honey: 20,
-        chicken: 300,
-        eggwhite: 200,
-        wpi: 30,
-        avocado: 0,
-        oliveoil: 0,
+        garaetteok: "200",
+        rice: "300",
+        honey: "20",
+        chicken: "300",
+        eggwhite: "200",
+        wpi: "30",
+        avocado: "0",
+        oliveoil: "0",
       });
 
-      // 카보로딩 모드
-      const [carbOnly, setCarbOnly] = useState(false);
-      const [mix, setMix] = useState({ garaetteok: 60, rice: 30, honey: 10 }); // %
+      const weight = useMemo(()=> num(weightStr, 0), [weightStr]);
+      const bf = useMemo(()=> num(bfStr, 0), [bfStr]);
+      const proteinLevel = useMemo(()=> num(proteinLevelStr, 2.6), [proteinLevelStr]);
 
       const LBM = useMemo(()=> r1(weight * (1 - clamp(bf,0,50)/100)), [weight,bf]);
       const phase = useMemo(()=> phaseForDay(dayKey), [dayKey]);
@@ -244,7 +253,7 @@
         let C=0,P=0,F=0,K=0;
         Object.keys(plan).forEach(key=>{
           const f=FOODS[key]; if(!f) return;
-          const g=Number(plan[key])||0;
+          const g=num(plan[key], 0);
           const x=g/f.unit;
           C+=f.C*x; P+=f.P*x; F+=f.F*x; K+=f.kcal*x;
         });
@@ -253,8 +262,8 @@
 
       // 차트 데이터
       const macroData = [
-        { name:"탄수", value: Ckcal },
-        { name:"단백질", value: Pkcal },
+        { name:"탄수", value: r1(carb_g*4) },
+        { name:"단백질", value: r1(protein_g*4) },
         { name:"지방", value: r1(fat_g*9) },
       ];
       const timelineData = DAY_OPTIONS.map((opt)=>{
@@ -276,7 +285,10 @@
       };
       const statusClass = (x)=> Math.abs(x) < 5 ? "ok" : (Math.abs(x) <= 15 ? "warn" : "err");
 
-      // ---- 액션: 카보 자동 배분 ----
+      // ---- 액션: 카보로딩 ----
+      const CARB_KEYS = ["garaetteok","rice","honey"];
+      const [carbOnly, setCarbOnly] = useState(false);
+      const [mix, setMix] = useState({ garaetteok: 60, rice: 30, honey: 10 }); // %
       function autoDistributeCarb() {
         const cpg = (key)=> FOODS[key].C / FOODS[key].unit;
         const totalShare = (mix.garaetteok||0) + (mix.rice||0) + (mix.honey||0);
@@ -292,28 +304,30 @@
         };
         setPlan(p=>({
           ...p,
-          garaetteok: grams.garaetteok,
-          rice: grams.rice,
-          honey: grams.honey,
-          chicken: 0,
-          eggwhite: 0,
-          avocado: 0,
-          oliveoil: 0,
+          garaetteok: String(grams.garaetteok),
+          rice: String(grams.rice),
+          honey: String(grams.honey),
+          chicken: "0",
+          eggwhite: "0",
+          avocado: "0",
+          oliveoil: "0",
         }));
       }
-
-      // ---- 액션: 단백질을 WPI로 보정 (저지방) ----
       function fixProteinWithWPI() {
         const need = Math.max(0, protein_g - totals.P);
         const pPerGramWPI = FOODS.wpi.P / FOODS.wpi.unit; // 25/30=0.833.. gP per g
         const wpiGrams = round5(need / pPerGramWPI);
-        setPlan(p=>({
-          ...p,
-          chicken: 0,
-          eggwhite: 0,
-          wpi: wpiGrams,
-        }));
+        setPlan(p=>({ ...p, chicken:"0", eggwhite:"0", wpi:String(wpiGrams) }));
       }
+
+      // ---- 전해질/수분 계산 ----
+      // 1 g 소금 ≈ 393 mg 나트륨
+      const sodiumFromSalt_mg = useMemo(()=> r1(num(saltGramStr,0) * 393), [saltGramStr]);
+      const sodiumExtra_mg = useMemo(()=> r1(num(sodiumExtraStr,0)), [sodiumExtraStr]);
+      const sodiumTotal_mg = useMemo(()=> r1(sodiumFromSalt_mg + sodiumExtra_mg), [sodiumFromSalt_mg, sodiumExtra_mg]);
+      const potassium_mg   = useMemo(()=> r1(num(potassiumStr,0)), [potassiumStr]);
+      const magnesium_mg   = useMemo(()=> r1(num(magnesiumStr,0)), [magnesiumStr]);
+      const water_ml       = useMemo(()=> r1(num(waterMlStr,0)), [waterMlStr]);
 
       const visibleKeys = carbOnly ? CARB_KEYS.concat(['wpi']) : Object.keys(FOODS);
 
@@ -321,7 +335,7 @@
         <div className="w-full min-h-screen text-slate-900">
           <div className="max-w-6xl mx-auto p-6">
             <div className="flex items-center justify-between gap-2">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 <span className="badge">통합 + 카보로딩 + 1소수표기</span></h1>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 <span className="badge">통합 + 카보로딩 + 전해질/수분</span></h1>
               <div className="text-sm text-slate-500">모든 수치: 소수점 1자리</div>
             </div>
 
@@ -330,11 +344,13 @@
               <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div>
                   <label className="block text-sm mb-1">체중 (kg)</label>
-                  <input type="number" step="0.1" className="w-full border rounded-xl px-3 py-2" value={weight} onChange={e=>setWeight(parseFloat(e.target.value||0))} />
+                  <input type="number" step="0.1" className="w-full border rounded-xl px-3 py-2"
+                    value={weightStr} onChange={e=>setWeightStr(e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-sm mb-1">체지방률 (%)</label>
-                  <input type="number" step="0.1" className="w-full border rounded-xl px-3 py-2" value={bf} onChange={e=>setBf(parseFloat(e.target.value||0))} />
+                  <input type="number" step="0.1" className="w-full border rounded-xl px-3 py-2"
+                    value={bfStr} onChange={e=>setBfStr(e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-sm mb-1">일자</label>
@@ -350,7 +366,7 @@
                 </div>
                 <div>
                   <label className="block text-sm mb-1">단백질 (g/kg LBM)</label>
-                  <select className="w-full border rounded-xl px-3 py-2" value={proteinLevel} onChange={e=>setProteinLevel(parseFloat(e.target.value))}>
+                  <select className="w-full border rounded-xl px-3 py-2" value={proteinLevelStr} onChange={e=>setProteinLevelStr(e.target.value)}>
                     {PROTEIN_LEVELS.map(v=> <option key={v} value={v}>{v.toFixed(1)}</option>)}
                   </select>
                 </div>
@@ -383,21 +399,66 @@
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3 text-sm">
                 <div className="stat">
                   <div className="text-slate-500 mb-1">가래떡 비율 (%)</div>
-                  <input type="number" className="w-full border rounded-xl px-3 py-2" value={mix.garaetteok} onChange={e=>setMix(m=>({...m, garaetteok: Number(e.target.value||0)}))} />
+                  <input type="number" className="w-full border rounded-xl px-3 py-2" value={mix.garaetteok}
+                    onChange={e=>setMix(m=>({...m, garaetteok: num(e.target.value, 0)}))} />
                 </div>
                 <div className="stat">
                   <div className="text-slate-500 mb-1">흰쌀밥 비율 (%)</div>
-                  <input type="number" className="w-full border rounded-xl px-3 py-2" value={mix.rice} onChange={e=>setMix(m=>({...m, rice: Number(e.target.value||0)}))} />
+                  <input type="number" className="w-full border rounded-xl px-3 py-2" value={mix.rice}
+                    onChange={e=>setMix(m=>({...m, rice: num(e.target.value, 0)}))} />
                 </div>
                 <div className="stat">
                   <div className="text-slate-500 mb-1">꿀 비율 (%)</div>
-                  <input type="number" className="w-full border rounded-xl px-3 py-2" value={mix.honey} onChange={e=>setMix(m=>({...m, honey: Number(e.target.value||0)}))} />
+                  <input type="number" className="w-full border rounded-xl px-3 py-2" value={mix.honey}
+                    onChange={e=>setMix(m=>({...m, honey: num(e.target.value, 0)}))} />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 mt-3">
                 <button className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" onClick={autoDistributeCarb}>1) 비율대로 탄수 자동배분</button>
                 <button className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" onClick={fixProteinWithWPI}>2) 단백질을 WPI로 보정(저지방)</button>
                 <span className="text-xs text-slate-500">자동배분은 g 단위를 5g 단위로 반올림합니다.</span>
+              </div>
+            </section>
+
+            {/* 전해질/수분 카드 */}
+            <section className="card p-4 mt-4">
+              <div className="font-semibold mb-2">전해질 · 수분 추적</div>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 text-sm">
+                <div className="stat">
+                  <div className="text-slate-500 mb-1">소금 (g)</div>
+                  <input type="number" step="0.1" className="w-full border rounded-xl px-3 py-2"
+                    value={saltGramStr} onChange={e=>setSaltGramStr(e.target.value)} />
+                  <div className="text-xs text-slate-500 mt-1">≈ Na {r1(sodiumFromSalt_mg)} mg</div>
+                </div>
+                <div className="stat">
+                  <div className="text-slate-500 mb-1">추가 나트륨 (mg)</div>
+                  <input type="number" step="1" className="w-full border rounded-xl px-3 py-2"
+                    value={sodiumExtraStr} onChange={e=>setSodiumExtraStr(e.target.value)} />
+                  <div className="text-xs text-slate-500 mt-1">총 Na {r1(sodiumTotal_mg)} mg</div>
+                </div>
+                <div className="stat">
+                  <div className="text-slate-500 mb-1">칼륨 (mg)</div>
+                  <input type="number" step="1" className="w-full border rounded-xl px-3 py-2"
+                    value={potassiumStr} onChange={e=>setPotassiumStr(e.target.value)} />
+                </div>
+                <div className="stat">
+                  <div className="text-slate-500 mb-1">마그네슘 (mg)</div>
+                  <input type="number" step="1" className="w-full border rounded-xl px-3 py-2"
+                    value={magnesiumStr} onChange={e=>setMagnesiumStr(e.target.value)} />
+                </div>
+                <div className="stat">
+                  <div className="text-slate-500 mb-1">물 섭취 (ml)</div>
+                  <input type="number" step="50" className="w-full border rounded-xl px-3 py-2"
+                    value={waterMlStr} onChange={e=>setWaterMlStr(e.target.value)} />
+                </div>
+              </div>
+              <p className="text-xs text-slate-500 mt-2">* 목표치(권장량)는 사람마다 다릅니다. 코치의 지침에 맞춰 목표를 별도 관리하세요. 이 카드는 입력값 추적/합계 도구입니다.</p>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3 text-sm">
+                <div className="stat"><div className="text-slate-500">Na(총)</div><div className="font-semibold">{r1(sodiumTotal_mg)} mg</div></div>
+                <div className="stat"><div className="text-slate-500">K</div><div className="font-semibold">{r1(potassium_mg)} mg</div></div>
+                <div className="stat"><div className="text-slate-500">Mg</div><div className="font-semibold">{r1(magnesium_mg)} mg</div></div>
+                <div className="stat"><div className="text-slate-500">물</div><div className="font-semibold">{r1(water_ml)} ml</div></div>
+                <div className="stat"><div className="text-slate-500">소금→Na 변환</div><div className="font-semibold">1 g ≈ 393 mg</div></div>
               </div>
             </section>
 
@@ -415,13 +476,14 @@
                   <tbody>
                     { (carbOnly ? CARB_KEYS.concat(['wpi']) : Object.keys(FOODS)).map((key)=>{
                       const f=FOODS[key];
-                      const g=Number(plan[key])||0;
+                      const g=num(plan[key],0);
                       const x=g/f.unit;
                       const C=r1(f.C*x), P=r1(f.P*x), F=r1(f.F*x), K=r1(f.kcal*x);
                       return (
                         <tr key={key}>
                           <td>{f.name}</td>
-                          <td><input type="number" step="1" className="w-24 border rounded-xl px-2 py-1" value={g} onChange={(e)=>setPlan(p=>({...p, [key]: e.target.value}))} /></td>
+                          <td><input type="number" step="1" className="w-24 border rounded-xl px-2 py-1" value={plan[key]}
+                            onChange={(e)=>setPlan(p=>({...p, [key]: e.target.value}))} /></td>
                           <td>{C}</td>
                           <td>{P}</td>
                           <td>{F}</td>
@@ -453,11 +515,7 @@
             </section>
 
             {/* 차트 */}
-            <ChartsSection macroData={[
-              { name:"탄수", value: r1(carb_g*4) },
-              { name:"단백질", value: r1(protein_g*4) },
-              { name:"지방", value: r1(fat_g*9) },
-            ]} timelineData={timelineData} />
+            <ChartsSection macroData={macroData} timelineData={timelineData} />
           </div>
         </div>
       );
