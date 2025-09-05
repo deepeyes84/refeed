@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>피크위크 매크로·수분 계산기 v1.0</title>
+  <title>피크위크 매크로·수분 계산기 v1.5.1</title>
   <meta name="description" content="리피딩·디플리션·슈퍼컴펜세이션·대회 당일(스포츠모델/보디빌딩)용 매크로(g)와 수분·나트륨 권장량을 체중·체지방률로 산출하는 모바일 계산기" />
   <style>
     :root {
@@ -24,17 +24,18 @@
       color: var(--ink);
       -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
     }
-    .wrap { max-width: 760px; margin: 0 auto; padding: env(safe-area-inset-top) 16px 48px; }
+    .wrap { max-width: 960px; margin: 0 auto; padding: env(safe-area-inset-top) 16px 64px; }
     header { position: sticky; top: 0; z-index: 30; backdrop-filter: blur(10px); background: rgba(11,12,16,0.7); border-bottom: 1px solid rgba(255,255,255,0.06); }
-    header .inner { max-width: 760px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+    header .inner { max-width: 960px; margin: 0 auto; padding: 12px 16px; display: flex; align-items: center; gap: 12px; justify-content: space-between; }
     header h1 { font-size: 18px; margin: 0; letter-spacing: .2px; font-weight: 700; }
     header small { color: var(--muted); }
     .panel { background: var(--panel); border: 1px solid rgba(255,255,255,0.06); border-radius: var(--radius); padding: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
     .grid { display: grid; gap: 12px; }
     .grid.cols-2 { grid-template-columns: 1fr 1fr; }
-    @media (max-width: 640px){ .grid.cols-2 { grid-template-columns: 1fr; } }
+    .grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 820px){ .grid.cols-2, .grid.cols-3 { grid-template-columns: 1fr; } }
     label { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    input[type="number"], select { width: 100%; background: #0f1116; color: var(--ink); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 12px; font-size: 16px; }
+    input[type="number"], select, input[type="date"], input[type="text"] { width: 100%; background: #0f1116; color: var(--ink); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 12px; font-size: 16px; }
     input[type="range"] { width: 100%; }
     .row { display: grid; gap: 6px; }
     .kicker { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; }
@@ -46,7 +47,7 @@
     .warn { color: var(--danger); }
     .ok { color: var(--ok); }
     .btns { display:flex; gap:8px; flex-wrap: wrap; }
-    button { background: #1b2230; color: var(--ink); border: 1px solid rgba(255,255,255,0.08); padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+    button { background: #1b2230; color: var(--ink); border: 1px solid rgba(255,255,255,0.08); padding: 10px 12px; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; }
     button.primary { background: linear-gradient(180deg, #1f4df0, #1743e0); border-color: transparent; }
     .section-title { display:flex; align-items:center; justify-content:space-between; margin: 8px 0 4px; }
     .pill { padding: 4px 8px; border-radius: 999px; border: 1px dashed rgba(255,255,255,.15); color: var(--muted); font-size: 12px; }
@@ -58,22 +59,67 @@
     .progress { width: 100%; height: 12px; background: #0f1116; border-radius: 999px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); }
     .progress > span { display:block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 0%; transition: width .3s ease; }
     .tiny { font-size: 11.5px; color: var(--muted); }
+    .table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .table th, .table td { border-bottom:1px solid rgba(255,255,255,.06); padding:8px; text-align:right; }
+    .table th:first-child, .table td:first-child { text-align:left; }
+    .rowbadges{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   </style>
 </head>
 <body>
   <header>
     <div class="inner">
-      <h1>피크위크 매크로·수분 계산기</h1>
-      <small class="chip">v1.0 · iPhone 최적화</small>
+      <div class="rowbadges">
+        <h1>피크위크 매크로·수분 계산기</h1>
+        <small class="chip">v1.5.1 · iPhone/데스크톱 최적화</small>
+        <small class="chip" id="ddayChip">D- —</small>
+      </div>
+      <div class="btns">
+        <button id="shareUrl" type="button">링크로 공유</button>
+        <button id="copySummary" type="button">요약 복사</button>
+      </div>
     </div>
   </header>
+
   <div class="wrap">
     <div class="panel grid">
+      <!-- 0) 전역 설정 -->
+      <div class="row">
+        <div class="section-title"><div>
+          <div class="kicker">0) 전역 설정</div>
+          <h3 style="margin:4px 0 0">단위·대회 날짜·자동 모드</h3></div>
+          <span class="pill">기본 단위 kg / % · 한국 시간</span>
+        </div>
+        <div class="grid cols-3">
+          <div class="row">
+            <label>단위</label>
+            <div class="btns">
+              <button id="unitKg" type="button" class="primary">kg</button>
+              <button id="unitLb" type="button">lb</button>
+            </div>
+            <div class="tiny">* 내부 계산은 항상 kg 기준. lb 입력 시 자동 환산(1 lb = 0.453592 kg)</div>
+          </div>
+          <div class="row">
+            <label>대회 날짜</label>
+            <input id="showDate" type="date" />
+            <div class="tiny">* 기본값: 2025-09-13 (토)</div>
+          </div>
+          <div class="row">
+            <label>자동 모드(피크 주간 규칙)</label>
+            <select id="autoMode">
+              <option value="off">끄기</option>
+              <option value="std">켜기 · D-7~D-4 디플리션, D-3~D-1 슈퍼컴프, D-0 쇼데이</option>
+            </select>
+            <div class="tiny">* 자동 모드가 켜져 있으면 날짜에 맞춰 모드가 자동 변경됩니다.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1) 입력 -->
       <div class="row">
         <div class="section-title"><div>
           <div class="kicker">1) 입력</div>
           <h3 style="margin:4px 0 0">체중·체지방률 및 모드</h3></div>
-          <span class="pill">기준 단위: kg / %</span>
+          <span class="pill">기준 단위: <span id="unitLabel">kg</span> / %</span>
         </div>
         <div class="grid cols-2">
           <div class="row">
@@ -106,6 +152,7 @@
         <div class="note">제출 버튼이 필요 없습니다. 값을 바꾸면 즉시 계산됩니다. 체지방률로 제지방량(FFM)을 산출합니다.</div>
       </div>
 
+      <!-- 2) 권장 & 미세조정 -->
       <div class="row">
         <div class="section-title">
           <div>
@@ -114,7 +161,7 @@
           </div>
           <span class="pill">문헌 기반 범위 · 기본값은 중간값</span>
         </div>
-        <div class="grid cols-2">
+        <div class="grid cols-3">
           <div class="row">
             <label>단백질 (g/FFM·kg) <small id="pRange"></small></label>
             <input type="range" id="pSlider" min="2.3" max="3.1" step="0.1" />
@@ -146,10 +193,10 @@
             <div class="out"><small>권장: 460~1150 mg/L</small><b id="sDrinkOut">— mg/L</b></div>
           </div>
         </div>
-        <div class="note tiny">* 단백질은 FFM 기준(g/FFM·kg), 탄수/지방은 체중 기준(g/BW·kg)으로 산출합니다. 수분은 체중 mL/kg로 산출.
-          모드에 따라 각 슬라이더 범위가 자동으로 세팅됩니다.</div>
+        <div class="note tiny">* 단백질은 FFM 기준(g/FFM·kg), 탄수/지방은 체중 기준(g/BW·kg)으로 산출합니다. 수분은 체중 mL/kg로 산출. 모드에 따라 각 슬라이더 범위가 자동으로 세팅됩니다.</div>
       </div>
 
+      <!-- 3) 출력 -->
       <div class="row">
         <div class="section-title">
           <div>
@@ -159,14 +206,10 @@
           <span class="pill">칼로리 환산: P4 · C4 · F9</span>
         </div>
         <div class="grid cols-2">
-          <div class="panel" style="background:#0f1116">
-            <canvas id="macroPie" height="260"></canvas>
-          </div>
-          <div class="panel" style="background:#0f1116">
-            <canvas id="macroBars" height="260"></canvas>
-          </div>
+          <div class="panel" style="background:#0f1116"><canvas id="macroPie" height="260"></canvas></div>
+          <div class="panel" style="background:#0f1116"><canvas id="macroBars" height="260"></canvas></div>
         </div>
-        <div class="grid cols-2">
+        <div class="grid cols-3">
           <div class="out"><small>단백질</small><b id="pG">— g (— kcal)</b></div>
           <div class="out"><small>탄수화물</small><b id="cG">— g (— kcal)</b></div>
           <div class="out"><small>지방</small><b id="fG">— g (— kcal)</b></div>
@@ -176,13 +219,13 @@
         </div>
       </div>
 
+      <!-- 4) 글리코겐 추정 -->
       <div class="row">
         <div class="section-title">
           <div>
             <div class="kicker">4) 글리코겐 추정 (선택)</div>
             <h3 style="margin:4px 0 0">저장량·수분결합 가정치</h3>
           </div>
-          <span class="pill">연구기반 근사 · 개인 편차 큼</span>
         </div>
         <div class="grid cols-2">
           <div class="row">
@@ -203,29 +246,162 @@
         </div>
       </div>
 
+      <!-- 5) 전해질/발한량 계산기 -->
+      <div class="row">
+        <div class="section-title">
+          <div>
+            <div class="kicker">5) 전해질 · 발한량 계산기</div>
+            <h3 style="margin:4px 0 0">훈련 시간·발한률 기반 소금량</h3>
+          </div>
+          <span class="pill">나트륨 목표: 슬라이더 상단 값 사용</span>
+        </div>
+        <div class="grid cols-3">
+          <div class="row">
+            <label>훈련 시간 (분)</label>
+            <input id="durMin" type="number" min="10" step="5" value="60" />
+          </div>
+          <div class="row">
+            <label>발한률 (mL/시)</label>
+            <input id="sweatRate" type="number" min="200" step="50" value="800" />
+            <div class="tiny">* 개인차 큼: 300~2000+ mL/h</div>
+          </div>
+          <div class="row">
+            <label>음료 나트륨 목표 (mg/L)</label>
+            <input id="drinkNa" type="number" min="300" step="10" value="700" />
+          </div>
+        </div>
+        <div class="grid cols-3">
+          <div class="out"><small>필요 음료량</small><b id="needFluid">— L</b></div>
+          <div class="out"><small>총 나트륨</small><b id="needNa">— mg</b></div>
+          <div class="out"><small>소금 환산</small><b id="needSalt">— g NaCl</b></div>
+        </div>
+      </div>
+
+      <!-- 6) 피크 주간 타임라인 -->
+      <div class="row">
+        <div class="section-title">
+          <div>
+            <div class="kicker">6) 피크 주간 타임라인</div>
+            <h3 style="margin:4px 0 0">D-7 ~ D-0 프리뷰(프리셋 기준)</h3>
+          </div>
+          <span class="pill">현재 BW/BF · 모드별 중간값</span>
+        </div>
+        <div class="panel" style="background:#0f1116">
+          <table class="table" id="planTable">
+            <thead>
+              <tr><th>날짜</th><th>D-</th><th>모드</th><th>단백질(g)</th><th>탄수(g)</th><th>지방(g)</th><th>총 kcal</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 7) 도구/프리셋/저장 -->
       <div class="row">
         <div class="section-title">
           <div>
             <div class="kicker">도구</div>
-            <h3 style="margin:4px 0 0">프리셋 · 저장 · 공유</h3>
+            <h3 style="margin:4px 0 0">프리셋 · 저장 · 공유 · 스냅샷</h3>
           </div>
           <span class="pill">로컬 저장됨</span>
         </div>
         <div class="btns">
-          <button id="presetLoose">프리셋: 보수적</button>
-          <button id="presetStd" class="primary">프리셋: 표준</button>
-          <button id="presetAgg">프리셋: 공격적</button>
-          <button id="save">현재 값 저장</button>
-          <button id="reset">초기화</button>
+          <button id="presetLoose" type="button">프리셋: 보수적</button>
+          <button id="presetStd" class="primary" type="button">프리셋: 표준</button>
+          <button id="presetAgg" type="button">프리셋: 공격적</button>
+          <button id="save" type="button">현재 값 저장</button>
+          <button id="reset" type="button">초기화</button>
+          <button id="showSnapshots" type="button">스냅샷 관리</button>
         </div>
-        <div class="tiny">* 프리셋은 모드별 슬라이더를 일괄 조정합니다. 저장은 브라우저 로컬스토리지에만 보관됩니다.</div>
+        <div class="tiny">* 프리셋은 모드별 슬라이더를 일괄 조정합니다. 저장은 브라우저 로컬스토리지에만 보관됩니다. 스냅샷 관리에서 이전 설정을 불러올 수 있습니다.</div>
+      </div>
+
+      <div class="row" id="snapshotsPanel" style="display:none">
+        <div class="section-title"><h3 style="margin:4px 0 0">스냅샷 목록</h3><span class="pill" id="snapCount">0개</span></div>
+        <div id="snapList" class="grid"></div>
+      </div>
+
+      <!-- 8) 식품 할당기 -->
+      <div class="row">
+        <div class="section-title">
+          <div>
+            <div class="kicker">8) 식품 할당기</div>
+            <h3 style="margin:4px 0 0">탄수화물 분배 (고 GI / 저 GI / 쇼데이 초고GI / 고섬유)</h3>
+          </div>
+          <span class="pill">현재 탄수 목표(cG) 자동 반영</span>
+        </div>
+
+        <div class="grid cols-2">
+          <div class="row">
+            <label>전략 프리셋</label>
+            <div class="btns">
+              <button id="giPresetHigh"  type="button">고 GI</button>
+              <button id="giPresetLow"   type="button">저 GI</button>
+              <button id="giPresetUltra" type="button" class="primary">쇼데이 초고 GI</button>
+              <button id="giPresetFiber" type="button">고섬유(저 GI)</button>
+            </div>
+            <div class="note">* 초고GI는 무대 직전 펌핑/카보업 가정. 고섬유는 소화속도 완만·포만감 중시.</div>
+          </div>
+          <div class="row">
+            <label>고 GI 비율 (%)</label>
+            <input id="giHighPct" type="range" min="0" max="100" step="5" value="60" />
+            <div class="out"><small>고 GI</small><b id="giHighOut">60%</b></div>
+            <div class="out"><small>저 GI</small><b id="giLowOut">40%</b></div>
+          </div>
+        </div>
+
+        <div class="panel" style="background:#0f1116">
+          <table class="table">
+            <thead><tr><th>구분</th><th>g 탄수</th><th>대표 식품</th></tr></thead>
+            <tbody>
+              <tr><td>고 GI</td><td id="giHighG">— g</td><td>흰밥/가래떡/꿀</td></tr>
+              <tr><td>저 GI</td><td id="giLowG">— g</td><td>오트밀/고구마/단호박/그릭요거트</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="panel" style="background:#0f1116">
+          <table class="table" id="giFoodTable">
+            <thead><tr><th>식품</th><th>비율(%)</th><th>필요 g</th><th>탄수 g</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
 
       <div class="row">
         <div class="hr"></div>
         <div class="footnote">
-          <b>주의:</b> 본 계산기는 최신 스포츠영양 가이드라인을 바탕으로 한 범위 추천입니다. 개인의 의학적 상태·약물·도핑 규정·소화기 민감도에 따라 조정해야 합니다. 대회 당일 과도한 수분/나트륨 조작은 퍼포먼스와 외형을 해칠 수 있습니다. 
+          <b>주의:</b> 본 계산기는 최신 스포츠영양 가이드라인을 바탕으로 한 범위 추천입니다. 개인의 의학적 상태·약물·도핑 규정·소화기 민감도에 따라 조정해야 합니다. 대회 당일 과도한 수분/나트륨 조작은 퍼포먼스와 외형을 해칠 수 있습니다.
         </div>
+      </div>
+
+      <!-- 9) 버전 백업/내보내기 -->
+      <div class="row">
+        <div class="section-title">
+          <div>
+            <div class="kicker">9) 버전 백업</div>
+            <h3 style="margin:4px 0 0">현 설정을 파일로 저장/불러오기</h3>
+          </div>
+          <span class="pill">로컬 스냅샷 동시 저장</span>
+        </div>
+        <div class="grid cols-3">
+          <div class="row">
+            <label>버전 태그</label>
+            <input id="verTag" type="text" placeholder="예) v1.5.1-20250905-peak" />
+          </div>
+          <div class="row">
+            <label>&nbsp;</label>
+            <div class="btns">
+              <button id="btnExport" type="button">백업 파일 저장</button>
+              <button id="btnImport" type="button">백업 불러오기</button>
+            </div>
+          </div>
+          <div class="row">
+            <label>파일 입력</label>
+            <input id="importFile" type="file" accept="application/json" />
+          </div>
+        </div>
+        <div class="tiny">* JSON 파일로 내보내며, 브라우저 로컬스토리지에도 스냅샷을 남깁니다.</div>
       </div>
 
     </div>
@@ -236,90 +412,60 @@
   <script>
     // --- Utility ---
     const $ = (id) => document.getElementById(id);
+    const toISODate = (d)=> new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10);
 
     // Preset ranges per mode (literature-informed). Protein uses per-kg FFM; carbs & fat use per-kg BW.
     const RANGES = {
-      refeed: {
-        p: [2.5, 3.1, 2.7],      // g/kg FFM
-        c: [3.5, 7.0, 5.0],      // g/kg BW
-        f: [0.3, 0.6, 0.4],      // g/kg BW
-        w: [35, 50, 42],         // mL/kg/day
-        s: [3000, 5000, 4000],   // mg/day
-        sDrink: 700              // mg/L around training
-      },
-      depletion: {
-        p: [2.7, 3.1, 2.9],
-        c: [0.5, 1.0, 0.7],
-        f: [0.5, 0.8, 0.6],
-        w: [35, 50, 40],
-        s: [2500, 4000, 3000],
-        sDrink: 700
-      },
-      supercomp: {
-        p: [2.3, 2.7, 2.5],
-        c: [7.0, 10.0, 8.5],
-        f: [0.2, 0.5, 0.3],
-        w: [40, 55, 46],
-        s: [3500, 5500, 4500],
-        sDrink: 700
-      },
-      showday: {
-        p: [2.5, 3.0, 2.7],
-        c: [1.0, 3.0, 2.0], // default will be tweaked by division
-        f: [0.2, 0.5, 0.3],
-        w: [30, 45, 36],
-        s: [2500, 3500, 3000],
-        sDrink: 600
-      }
+      refeed: { p: [2.5, 3.1, 2.7], c: [3.5, 7.0, 5.0], f: [0.3, 0.6, 0.4], w: [35, 50, 42], s: [3000, 5000, 4000], sDrink: 700 },
+      depletion: { p: [2.7, 3.1, 2.9], c: [0.5, 1.0, 0.7], f: [0.5, 0.8, 0.6], w: [35, 50, 40], s: [2500, 4000, 3000], sDrink: 700 },
+      supercomp: { p: [2.3, 2.7, 2.5], c: [7.0, 10.0, 8.5], f: [0.2, 0.5, 0.3], w: [40, 55, 46], s: [3500, 5500, 4500], sDrink: 700 },
+      showday: { p: [2.5, 3.0, 2.7], c: [1.0, 3.0, 2.0], f: [0.2, 0.5, 0.3], w: [30, 45, 36], s: [2500, 3500, 3000], sDrink: 600 }
     };
 
     // State
     const state = {
+      unit: 'kg',
       bw: Number($("bw").value),
       bf: Number($("bf").value),
       mode: $("mode").value,
-      division: "sportsmodel",
-      glycPerKg: 12,    // g glycogen per kg FFM (tunable)
-      waterRatio: 3.0   // g water per g glycogen (tunable)
+      division: 'sportsmodel',
+      glycPerKg: 12,
+      waterRatio: 3.0,
+      showDate: '2025-09-13',
+      autoMode: 'off',
+      giMode: 'high'
     };
 
     // Elements
     const els = {
-      bwLive: $("bwLive"), bfLive: $("bfLive"),
+      unitKg: $("unitKg"), unitLb: $("unitLb"), unitLabel: $("unitLabel"),
+      bw: $("bw"), bf: $("bf"), bwLive: $("bwLive"), bfLive: $("bfLive"),
+      mode: $("mode"), division: $("division"), divisionWrap: $("divisionWrap"),
       pSlider: $("pSlider"), cSlider: $("cSlider"), fSlider: $("fSlider"), wSlider: $("wSlider"), sSlider: $("sSlider"), sDrink: $("sDrink"),
       pRange: $("pRange"), cRange: $("cRange"), fRange: $("fRange"), wRange: $("wRange"), sRange: $("sRange"),
-      pSel: $("pSel"), cSel: $("cSel"), fSel: $("fSel"), wSel: $("wSel"),
-      pOut: $("pOut"), cOut: $("cOut"), fOut: $("fOut"), wOut: $("wOut"), sOut: $("sOut"), sDrinkOut: $("sDrinkOut"), sSel: $("sSel"),
+      pSel: $("pSel"), cSel: $("cSel"), fSel: $("fSel"), wSel: $("wSel"), sSel: $("sSel"),
+      pOut: $("pOut"), cOut: $("cOut"), fOut: $("fOut"), wOut: $("wOut"), sOut: $("sOut"), sDrinkOut: $("sDrinkOut"),
       pG: $("pG"), cG: $("cG"), fG: $("fG"), kcal: $("kcal"), water: $("water"), sodium: $("sodium"),
-      glycPerKg: $("glycPerKg"), glycPerKgSel: $("glycPerKgSel"), glycCap: $("glycCap"),
-      waterRatio: $("waterRatio"), waterRatioSel: $("waterRatioSel"), glycWater: $("glycWater"), glycFill: $("glycFill"), glycNote: $("glycNote"),
-      mode: $("mode"), division: $("division"), divisionWrap: $("divisionWrap"),
-      presetLoose: $("presetLoose"), presetStd: $("presetStd"), presetAgg: $("presetAgg"), save: $("save"), reset: $("reset")
+      glycPerKg: $("glycPerKg"), glycPerKgSel: $("glycPerKgSel"), glycCap: $("glycCap"), waterRatio: $("waterRatio"), waterRatioSel: $("waterRatioSel"), glycWater: $("glycWater"), glycFill: $("glycFill"), glycNote: $("glycNote"),
+      showDate: $("showDate"), autoMode: $("autoMode"), ddayChip: $("ddayChip"),
+      presetLoose: $("presetLoose"), presetStd: $("presetStd"), presetAgg: $("presetAgg"), save: $("save"), reset: $("reset"),
+      shareUrl: $("shareUrl"), copySummary: $("copySummary"),
+      durMin: $("durMin"), sweatRate: $("sweatRate"), drinkNa: $("drinkNa"), needFluid: $("needFluid"), needNa: $("needNa"), needSalt: $("needSalt"),
+      planTable: $("planTable").querySelector('tbody'),
+      showSnapshots: $("showSnapshots"), snapshotsPanel: $("snapshotsPanel"), snapList: $("snapList"), snapCount: $("snapCount"),
+      giPresetHigh: $("giPresetHigh"), giPresetLow: $("giPresetLow"), giPresetUltra: $("giPresetUltra"), giPresetFiber: $("giPresetFiber"),
+      giHighPct: $("giHighPct"), giHighOut: $("giHighOut"), giLowOut: $("giLowOut"), giHighG: $("giHighG"), giLowG: $("giLowG"),
+      giFoodTable: $("giFoodTable").querySelector('tbody'),
+      verTag: $("verTag"), btnExport: $("btnExport"), btnImport: $("btnImport"), importFile: $("importFile")
     };
 
-    // Charts init
+    // Charts
     let pieChart, barChart;
     function initCharts(){
       const pieCtx = $("macroPie").getContext('2d');
       const barCtx = $("macroBars").getContext('2d');
-      pieChart = new Chart(pieCtx, {
-        type: 'doughnut',
-        data: { labels: ['단백질 kcal', '탄수 kcal', '지방 kcal'], datasets: [{ data: [1,1,1] }] },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { color: '#cfd3da' } } },
-          cutout: '55%'
-        }
-      });
-      barChart = new Chart(barCtx, {
-        type: 'bar',
-        data: { labels: ['단백질 (g)', '탄수 (g)', '지방 (g)'], datasets: [{ data: [0,0,0] }] },
-        options: {
-          responsive: true, maintainAspectRatio: false,
-          plugins: { legend: { display:false } },
-          scales: { x: { ticks: { color:'#cfd3da' } }, y: { ticks: { color:'#cfd3da' }, beginAtZero: true } }
-        }
-      });
+      pieChart = new Chart(pieCtx, { type: 'doughnut', data: { labels: ['단백질 kcal', '탄수 kcal', '지방 kcal'], datasets: [{ data: [1,1,1] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: '#cfd3da' } } }, cutout: '55%' } });
+      barChart = new Chart(barCtx, { type: 'bar', data: { labels: ['단백질 (g)', '탄수 (g)', '지방 (g)'], datasets: [{ data: [0,0,0] }] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display:false } }, scales: { x: { ticks: { color:'#cfd3da' } }, y: { ticks: { color:'#cfd3da' }, beginAtZero: true } } } });
     }
 
     // Helpers
@@ -334,11 +480,8 @@
 
     function applyModeDefaults(){
       const r = RANGES[state.mode];
-      // Show-day division tweak for carbs default
       let cDefault = r.c[2];
-      if(state.mode === 'showday'){
-        cDefault = (state.division === 'bodybuilding') ? 2.5 : 1.5;
-      }
+      if(state.mode === 'showday') cDefault = (state.division === 'bodybuilding') ? 2.5 : 1.5;
       els.pSlider.min = r.p[0]; els.pSlider.max = r.p[1]; els.pSlider.value = r.p[2];
       els.cSlider.min = r.c[0]; els.cSlider.max = r.c[1]; els.cSlider.value = cDefault;
       els.fSlider.min = r.f[0]; els.fSlider.max = r.f[1]; els.fSlider.value = r.f[2];
@@ -350,9 +493,73 @@
 
     function fmt(n, unit=""){ return `${n.toLocaleString(undefined,{maximumFractionDigits: (unit==='g'||unit==='kcal')?0:1})} ${unit}`.trim(); }
 
+    function bwToKg(){
+      const raw = Number(els.bw.value) || 0; return state.unit==='kg' ? raw : raw*0.453592;
+    }
+
+    function updateDday(){
+      const today = new Date();
+      const show = new Date(state.showDate + 'T00:00:00');
+      const diff = Math.ceil((show - new Date(today.getFullYear(), today.getMonth(), today.getDate()))/86400000);
+      els.ddayChip.textContent = diff===0? 'D-DAY' : (diff>0? `D-${diff}` : `D+${Math.abs(diff)}`);
+      if(state.autoMode==='std'){
+        if(diff<=0){ setMode('showday'); }
+        else if(diff<=3){ setMode('supercomp'); }
+        else if(diff<=7){ setMode('depletion'); }
+      }
+    }
+
+    function setMode(m){ state.mode = m; els.mode.value = m; handleModeChange(); }
+
+    // --- GI 식품군/프리셋 ---
+    const FOOD = {
+      rice:{name:'흰밥', c100:28}, tteok:{name:'가래떡', c100:50}, honey:{name:'꿀', c100:82},
+      oats:{name:'오트밀(건식)', c100:66}, sweet:{name:'고구마', c100:20}, pumpkin:{name:'단호박', c100:7}, yogurt:{name:'그릭요거트(무가당)', c100:4}
+    };
+    const PRESET = {
+      high:  {group:'high',  highPct:60, items:[['rice',50],['tteok',35],['honey',15]]},
+      low:   {group:'low',   highPct:30, items:[['oats',35],['sweet',40],['pumpkin',15],['yogurt',10]]},
+      ultra: {group:'high',  highPct:85, items:[['rice',55],['tteok',30],['honey',15]]},
+      fiber: {group:'low',   highPct:25, items:[['oats',45],['sweet',35],['pumpkin',15],['yogurt',5]]}
+    };
+
+    function updateGIAlloc(cG){
+      const pct = Number(els.giHighPct.value);
+      els.giHighOut.textContent = pct+"%";
+      els.giLowOut.textContent  = (100-pct)+"%";
+      const highG = Math.round(cG*pct/100);
+      const lowG  = cG - highG;
+      els.giHighG.textContent = highG+" g";
+      els.giLowG.textContent  = lowG+" g";
+    }
+
+    function renderFoodRows(cG, preset){
+      const pct = Number(els.giHighPct.value);
+      const highCarb = Math.round(cG*pct/100);
+      const lowCarb  = cG - highCarb;
+      const items = (preset && preset.items) ? preset.items : (pct>=50 ? PRESET.high.items : PRESET.low.items);
+      const groupCarb = (preset? (preset.group==='high'? highCarb: lowCarb) : (pct>=50? highCarb: lowCarb));
+      const rows = items.map(([key,p])=>{
+        const carbG = Math.round(groupCarb * (p/100));
+        const grams = carbG<=0?0: Math.round((carbG/FOOD[key].c100)*100);
+        return `<tr><td>${FOOD[key].name}</td><td style="text-align:right">${p}%</td><td style="text-align:right">${grams} g</td><td style="text-align:right">${carbG} g</td></tr>`;
+      });
+      els.giFoodTable.innerHTML = rows.join('');
+    }
+
+    function applyGiPreset(name){
+      const p = PRESET[name]; if(!p) return;
+      els.giHighPct.value = p.highPct;
+      updateGIAlloc(lastC);
+      renderFoodRows(lastC, p);
+    }
+
+    // --- Core compute ---
+    let lastC = 0;
+
     function compute(){
       // Read inputs
-      state.bw = Number($("bw").value) || 0;
+      state.bw = bwToKg();
       state.bf = Number($("bf").value) || 0;
       const ffm = state.bw * (1 - state.bf/100);
       const pPer = Number(els.pSlider.value);
@@ -366,131 +573,254 @@
       const pG = Math.round(pPer * ffm);
       const cG = Math.round(cPer * state.bw);
       const fG = Math.round(fPer * state.bw);
+      lastC = cG;
 
       const kcal = Math.round(pG*4 + cG*4 + fG*9);
       const waterL = (wPer * state.bw) / 1000; // L/day
 
       // Update text
-      els.bwLive.textContent = fmt(state.bw,'kg');
+      const bwDisplay = state.unit==='kg' ? state.bw : state.bw/0.453592;
+      els.bwLive.textContent = fmt(bwDisplay, state.unit);
       els.bfLive.textContent = `${state.bf.toFixed(1)}%`;
-
-      els.pSel.textContent = `${pPer.toFixed(1)}`;
-      els.cSel.textContent = `${cPer.toFixed(1)}`;
-      els.fSel.textContent = `${fPer.toFixed(2)}`;
-      els.wSel.textContent = `${wPer.toFixed(0)}`;
-
-      els.pOut.textContent = fmt(pG,'g');
-      els.cOut.textContent = fmt(cG,'g');
-      els.fOut.textContent = fmt(fG,'g');
-      els.wOut.textContent = fmt(waterL,'L/일');
-      els.sDrinkOut.textContent = fmt(sDrink,'mg/L');
-      els.sOut.textContent = fmt(sDay,'mg');
-
+      els.pSel.textContent = `${pPer.toFixed(1)}`; els.cSel.textContent = `${cPer.toFixed(1)}`; els.fSel.textContent = `${fPer.toFixed(2)}`; els.wSel.textContent = `${wPer.toFixed(0)}`;
+      els.pOut.textContent = fmt(pG,'g'); els.cOut.textContent = fmt(cG,'g'); els.fOut.textContent = fmt(fG,'g'); els.wOut.textContent = fmt(waterL,'L/일'); els.sDrinkOut.textContent = fmt(sDrink,'mg/L'); els.sOut.textContent = fmt(sDay,'mg');
+      els.sSel.textContent = `${sDay.toFixed(0)}`; // bugfix: 나트륨 선택값 표시
       els.pG.textContent = `${fmt(pG,'g')} (${fmt(pG*4,'kcal')})`;
       els.cG.textContent = `${fmt(cG,'g')} (${fmt(cG*4,'kcal')})`;
       els.fG.textContent = `${fmt(fG,'g')} (${fmt(fG*9,'kcal')})`;
-      els.kcal.textContent = fmt(kcal,'kcal');
-      els.water.textContent = fmt(waterL,'L/일');
-      els.sodium.textContent = fmt(sDay,'mg/일');
+      els.kcal.textContent = fmt(kcal,'kcal'); els.water.textContent = fmt(waterL,'L/일'); els.sodium.textContent = fmt(sDay,'mg/일');
 
       // Charts
-      const pieData = [pG*4, cG*4, fG*9];
-      pieChart.data.datasets[0].data = pieData;
-      pieChart.update('none');
-
-      barChart.data.datasets[0].data = [pG, cG, fG];
-      barChart.update('none');
+      pieChart.data.datasets[0].data = [pG*4, cG*4, fG*9]; pieChart.update('none');
+      barChart.data.datasets[0].data = [pG, cG, fG]; barChart.update('none');
 
       // Glycogen estimate
       const glycPerKg = Number(els.glycPerKg.value);
       const waterRatio = Number(els.waterRatio.value);
-      const glycCap = Math.round(glycPerKg * ffm + 100); // + ~100g liver reserve (rough)
+      const glycCap = Math.round(glycPerKg * ffm + 100); // + ~100g liver reserve
       const fill = Math.max(0, Math.min(1, cG / glycCap));
       const glycWaterL = ((cG * waterRatio) / 1000);
+      els.glycPerKgSel.textContent = `${glycPerKg.toFixed(1)}`; els.waterRatioSel.textContent = `${waterRatio.toFixed(1)}`; els.glycCap.textContent = fmt(glycCap,'g'); els.glycWater.textContent = fmt(glycWaterL,'L'); els.glycFill.style.width = `${(fill*100).toFixed(0)}%`; els.glycNote.textContent = `탄수 ${fmt(cG,'g')} → 글리코겐 채움 추정 ${Math.round(fill*100)}% (최대치 ${fmt(glycCap,'g')} 기준).`;
 
-      els.glycPerKgSel.textContent = `${glycPerKg.toFixed(1)}`;
-      els.waterRatioSel.textContent = `${waterRatio.toFixed(1)}`;
-      els.glycCap.textContent = fmt(glycCap,'g');
-      els.glycWater.textContent = fmt(glycWaterL,'L');
-      els.glycFill.style.width = `${(fill*100).toFixed(0)}%`;
-      els.glycNote.textContent = `탄수 ${fmt(cG,'g')} → 글리코겐 채움 추정 ${Math.round(fill*100)}% (최대치 ${fmt(glycCap,'g')} 기준).`;
+      // Electrolyte calculator
+      const durH = Math.max(0, (Number(els.durMin.value)||0) / 60);
+      const sweat = Math.max(0, Number(els.sweatRate.value)||0); // mL/h
+      const drinkNa = Math.max(0, Number(els.drinkNa.value)||0); // mg/L
+      const needFluidL = (durH * sweat) / 1000; // L
+      const needNaMg = Math.round(needFluidL * drinkNa);
+      const saltG = needNaMg / 393; // NaCl 39.3% Na by weight
+      els.needFluid.textContent = fmt(needFluidL, 'L');
+      els.needNa.textContent = fmt(needNaMg, 'mg');
+      els.needSalt.textContent = `${saltG.toFixed(2)} g NaCl`;
+
+      // Planner preview
+      renderPlan();
+
+      // GI allocator update
+      updateGIAlloc(lastC);
+      renderFoodRows(lastC);
 
       // Persist quick
       try {
-        localStorage.setItem('peakCalc:v1', JSON.stringify({
-          bw: state.bw, bf: state.bf, mode: state.mode, division: state.division,
-          pPer, cPer, fPer, wPer, sDay, sDrink, glycPerKg, waterRatio
+        localStorage.setItem('peakCalc:v1.5.1', JSON.stringify({
+          unit: state.unit, bw: Number(els.bw.value), bf: state.bf, mode: state.mode, division: state.division,
+          pPer, cPer, fPer, wPer, sDay, sDrink, glycPerKg, waterRatio, showDate: state.showDate, autoMode: state.autoMode
         }));
       } catch(e) {}
     }
 
+    function renderPlan(){
+      const show = new Date(state.showDate + 'T00:00:00');
+      const rows = [];
+      for(let d=7; d>=0; d--){
+        const day = new Date(show); day.setDate(show.getDate()-d);
+        const iso = toISODate(day);
+        let mode = 'refeed';
+        if(d===0) mode='showday';
+        else if(d<=3) mode='supercomp';
+        else if(d<=7) mode='depletion';
+        const r = RANGES[mode];
+        const bw = state.bw; const ffm = bw*(1-state.bf/100);
+        const pG = Math.round(r.p[2]*ffm);
+        const cMid = (mode==='showday' ? ((state.division==='bodybuilding')?2.5:1.5) : r.c[2]);
+        const cG = Math.round(cMid*bw);
+        const fG = Math.round(r.f[2]*bw);
+        const kcal = Math.round(pG*4 + cG*4 + fG*9);
+        rows.push(`<tr><td>${iso}</td><td style="text-align:center">D-${d}</td><td style="text-transform:capitalize">${mode}</td><td>${pG}</td><td>${cG}</td><td>${fG}</td><td>${kcal}</td></tr>`);
+      }
+      els.planTable.innerHTML = rows.join('');
+    }
+
     function loadSaved(){
+      try{
+        if(location.hash && location.hash.startsWith('#{')){
+          const decoded = decodeURIComponent(location.hash.slice(1));
+          const d = JSON.parse(decoded);
+          applyImport(d);
+          location.hash = '';
+          return true;
+        }
+      }catch(e){}
       try {
-        const raw = localStorage.getItem('peakCalc:v1');
+        const raw = localStorage.getItem('peakCalc:v1.5.1') || localStorage.getItem('peakCalc:v1.5') || localStorage.getItem('peakCalc:v1.3') || localStorage.getItem('peakCalc:v1');
         if(!raw) return false;
-        const d = JSON.parse(raw);
-        $("bw").value = d.bw; $("bf").value = d.bf; state.mode = d.mode || 'refeed'; state.division = d.division || 'sportsmodel';
-        $("mode").value = state.mode; $("division").value = state.division;
-        applyModeDefaults();
-        els.pSlider.value = d.pPer; els.cSlider.value = d.cPer; els.fSlider.value = d.fPer; els.wSlider.value = d.wPer; els.sSlider.value = d.sDay; els.sDrink.value = d.sDrink;
-        els.glycPerKg.value = d.glycPerKg || 12; els.waterRatio.value = d.waterRatio || 3.0;
-        return true;
+        const d = JSON.parse(raw); applyImport(d); return true;
       } catch(e) { return false; }
     }
 
-    function handleModeChange(){
-      state.mode = els.mode.value;
-      // Toggle division for show day
-      els.divisionWrap.style.display = (state.mode === 'showday') ? 'block' : 'none';
+    function applyImport(d){
+      state.unit = d.unit || 'kg';
+      els.unitKg.classList.toggle('primary', state.unit==='kg'); els.unitLb.classList.toggle('primary', state.unit==='lb');
+      els.unitLabel.textContent = state.unit;
+      els.bw.value = (d.bw!=null)? d.bw : 71.0;
+      els.bf.value = d.bf||10.0; state.mode = d.mode||'refeed'; state.division = d.division||'sportsmodel';
+      els.mode.value = state.mode; els.division.value = state.division;
+      state.showDate = d.showDate || '2025-09-13'; els.showDate.value = state.showDate;
+      state.autoMode = d.autoMode || 'off'; els.autoMode.value = state.autoMode;
       applyModeDefaults();
+      els.pSlider.value = d.pPer || els.pSlider.value; els.cSlider.value = d.cPer || els.cSlider.value; els.fSlider.value = d.fPer || els.fSlider.value; els.wSlider.value = d.wPer || els.wSlider.value; els.sSlider.value = d.sDay || els.sSlider.value; els.sDrink.value = d.sDrink || els.sDrink.value; els.glycPerKg.value = d.glycPerKg || 12; els.waterRatio.value = d.waterRatio || 3.0;
       compute();
     }
 
-    function handleDivisionChange(){
-      state.division = els.division.value;
-      if(state.mode === 'showday'){
-        // tweak carb default when switching division
-        const r = RANGES.showday;
-        els.cSlider.value = (state.division === 'bodybuilding') ? 2.5 : 1.5;
-      }
-      compute();
+    function handleModeChange(){
+      state.mode = els.mode.value; els.divisionWrap.style.display = (state.mode === 'showday') ? 'block' : 'none'; applyModeDefaults(); compute();
     }
 
+    function handleDivisionChange(){ state.division = els.division.value; if(state.mode === 'showday'){ els.cSlider.value = (state.division === 'bodybuilding') ? 2.5 : 1.5; } compute(); }
+
+    // ----- 프리셋(버그 수정) -----
     function applyPreset(name){
-      const m = state.mode;
-      const r = RANGES[m];
+      const m = state.mode; const r = RANGES[m];
       if(name==='loose'){
-        els.pSlider.value = r.p[0]; els.cSlider.value = r.c[0]; els.fSlider.value = r.f[0]; els.wSlider.value = r.w[0]; els.sSlider.value = r.s[0];
+        els.pSlider.value = r.p[0]; els.cSlider.value = (m==='showday'? (state.division==='bodybuilding'?2.5:1.5): r.c[0]); els.fSlider.value = r.f[0]; els.wSlider.value = r.w[0]; els.sSlider.value = r.s[0];
       } else if(name==='std'){
         els.pSlider.value = r.p[2]; els.cSlider.value = (m==='showday'? (state.division==='bodybuilding'?2.5:1.5): r.c[2]); els.fSlider.value = r.f[2]; els.wSlider.value = r.w[2]; els.sSlider.value = r.s[2];
-      } else if(name==='agg'){
-        els.pSlider.value = r.p[1]; els.cSlider.value = r.c[1]; els.fSlider.value = r.f[1]; els.wSlider.value = r.w[1]; els.sSlider.value = r.s[1];
+      } else { // 'agg'
+        els.pSlider.value = r.p[1]; els.cSlider.value = (m==='showday'? (state.division==='bodybuilding'?3.0:2.5): r.c[1]); els.fSlider.value = r.f[1]; els.wSlider.value = r.w[1]; els.sSlider.value = r.s[1];
       }
       compute();
+    }
+
+    function shareAsUrl(){
+      const payload = { unit: state.unit, bw: Number(els.bw.value), bf: Number(els.bf.value), mode: state.mode, division: state.division, pPer: Number(els.pSlider.value), cPer: Number(els.cSlider.value), fPer: Number(els.fSlider.value), wPer: Number(els.wSlider.value), sDay: Number(els.sSlider.value), sDrink: Number(els.sDrink.value), glycPerKg: Number(els.glycPerKg.value), waterRatio: Number(els.waterRatio.value), showDate: state.showDate, autoMode: state.autoMode };
+      const hash = encodeURIComponent(JSON.stringify(payload));
+      const url = location.origin + location.pathname + '#' + hash;
+      navigator.clipboard.writeText(url).then(()=>alert('현재 설정 링크가 클립보드에 복사되었습니다.'));
+    }
+
+    function copySummary(){
+      const txt = [
+        `체중: ${els.bwLive.textContent} / 체지방률: ${els.bfLive.textContent}`,
+        `모드: ${state.mode} / 종목: ${state.division}`,
+        `P: ${els.pG.textContent} | C: ${els.cG.textContent} | F: ${els.fG.textContent} | 총칼: ${els.kcal.textContent}`,
+        `물: ${els.water.textContent} / Na: ${els.sodium.textContent}`,
+        `전해질(훈련): 음료 ${els.needFluid.textContent}, Na ${els.needNa.textContent} ≈ 소금 ${els.needSalt.textContent}`,
+        `대회일: ${state.showDate} (${els.ddayChip.textContent})`
+      ].join('\\n');
+      navigator.clipboard.writeText(txt).then(()=>alert('요약이 복사되었습니다.'));
+    }
+
+    function toggleUnit(u){
+      if(state.unit===u) return;
+      const current = Number(els.bw.value)||0;
+      if(u==='lb' && state.unit==='kg'){ els.bw.value = (current/0.453592).toFixed(1); }
+      if(u==='kg' && state.unit==='lb'){ els.bw.value = (current*0.453592).toFixed(1); }
+      state.unit = u; els.unitLabel.textContent = u; els.unitKg.classList.toggle('primary', u==='kg'); els.unitLb.classList.toggle('primary', u==='lb'); compute();
+    }
+
+    function updateShowDate(v){ state.showDate = v; updateDday(); compute(); }
+    function updateAutoMode(){ state.autoMode = els.autoMode.value; updateDday(); }
+
+    // Snapshots
+    function buildSnapshotCard(key, idx){
+      const d = JSON.parse(localStorage.getItem(key));
+      const dt = new Date(Number(key.split(':').pop()));
+      const wrap = document.createElement('div'); wrap.className='panel';
+      wrap.innerHTML = `<div class="row"><div class="section-title"><div><b>${dt.toLocaleString()}</b></div><div class="btns"><button data-act="load" type="button">불러오기</button><button data-act="del" type="button">삭제</button></div></div><div class="tiny">모드: ${d.mode}, 단위: ${d.unit || 'kg'}, BW입력값: ${d.bw}${d.unit==='lb'?' lb':' kg'}, BF: ${d.bf}% · 대회일: ${d.showDate||'-'}</div></div>`;
+      wrap.querySelector('[data-act="load"]').addEventListener('click', ()=>applyImport(d));
+      wrap.querySelector('[data-act="del"]').addEventListener('click', ()=>{ localStorage.removeItem(key); renderSnapshots(); });
+      return wrap;
+    }
+
+    function renderSnapshots(){
+      const keys = Object.keys(localStorage).filter(k=>k.startsWith('peakCalc:snapshot:')).sort();
+      els.snapCount.textContent = keys.length+"개";
+      els.snapList.innerHTML = '';
+      keys.forEach((k,i)=>{ els.snapList.appendChild(buildSnapshotCard(k,i)); });
+      els.snapshotsPanel.style.display = 'block';
     }
 
     // Events
-    $("bw").addEventListener('input', compute);
-    $("bf").addEventListener('input', compute);
-    els.mode.addEventListener('change', handleModeChange);
-    els.division.addEventListener('change', handleDivisionChange);
-    [els.pSlider, els.cSlider, els.fSlider, els.wSlider, els.sSlider, els.sDrink, els.glycPerKg, els.waterRatio].forEach(el=>{
-      el.addEventListener('input', compute);
+    els.bw.addEventListener('input', compute); els.bf.addEventListener('input', compute);
+    els.mode.addEventListener('change', handleModeChange); els.division.addEventListener('change', handleDivisionChange);
+    [els.pSlider, els.cSlider, els.fSlider, els.wSlider, els.sSlider, els.sDrink, els.glycPerKg, els.waterRatio].forEach(el=>{ el.addEventListener('input', compute); });
+    els.presetLoose.addEventListener('click', ()=>applyPreset('loose')); els.presetStd.addEventListener('click', ()=>applyPreset('std')); els.presetAgg.addEventListener('click', ()=>applyPreset('agg'));
+    els.save.addEventListener('click', ()=>{ try{ localStorage.setItem('peakCalc:snapshot:'+Date.now(), localStorage.getItem('peakCalc:v1.5.1')); alert('현재 설정이 저장되었습니다 (이 기기 전용).'); }catch(e){} });
+    els.reset.addEventListener('click', ()=>{ localStorage.removeItem('peakCalc:v1.5.1'); applyModeDefaults(); compute(); });
+    els.unitKg.addEventListener('click', ()=>toggleUnit('kg')); els.unitLb.addEventListener('click', ()=>toggleUnit('lb'));
+    els.showDate.addEventListener('change', (e)=>updateShowDate(e.target.value));
+    els.autoMode.addEventListener('change', updateAutoMode);
+    els.shareUrl.addEventListener('click', shareAsUrl);
+    els.copySummary.addEventListener('click', copySummary);
+    $("showSnapshots").addEventListener('click', renderSnapshots);
+
+    // GI events
+    els.giHighPct.addEventListener('input', ()=>{ updateGIAlloc(lastC); renderFoodRows(lastC); });
+    els.giPresetHigh.addEventListener('click', ()=>applyGiPreset('high'));
+    els.giPresetLow.addEventListener('click', ()=>applyGiPreset('low'));
+    els.giPresetUltra.addEventListener('click', ()=>applyGiPreset('ultra'));
+    els.giPresetFiber.addEventListener('click', ()=>applyGiPreset('fiber'));
+
+    // --- 버전 백업/내보내기 ---
+    function currentPayload(){
+      return {
+        bw: Number(document.getElementById('bw')?.value||0),
+        bf: Number(document.getElementById('bf')?.value||0),
+        mode: state.mode, division: state.division,
+        pPer: Number(els.pSlider.value), cPer: Number(els.cSlider.value), fPer: Number(els.fSlider.value),
+        wPer: Number(els.wSlider.value), sDay: Number(els.sSlider.value), sDrink: Number(els.sDrink.value),
+        glycPerKg: Number(document.getElementById('glycPerKg')?.value||12),
+        waterRatio: Number(document.getElementById('waterRatio')?.value||3.0),
+        timestamp: Date.now(), version: (els.verTag?.value||'v1.5.1')
+      };
+    }
+    function downloadJSON(filename, data){
+      const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+      const url = URL.createObjectURL(blob); const a = document.createElement('a');
+      a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+    els.btnExport?.addEventListener('click', ()=>{
+      const payload = currentPayload();
+      const fname = `peakweek-${payload.version}-${new Date(payload.timestamp).toISOString().slice(0,10)}.json`;
+      try{ localStorage.setItem('peakCalc:snapshot:'+payload.version+':'+payload.timestamp, JSON.stringify(payload)); }catch(e){}
+      downloadJSON(fname, payload);
+      alert('백업이 저장되었습니다. (로컬 스냅샷 + JSON 파일)');
     });
-
-    els.presetLoose.addEventListener('click', ()=>applyPreset('loose'));
-    els.presetStd.addEventListener('click', ()=>applyPreset('std'));
-    els.presetAgg.addEventListener('click', ()=>applyPreset('agg'));
-
-    els.save.addEventListener('click', ()=>{ try{ localStorage.setItem('peakCalc:snapshot:'+Date.now(), localStorage.getItem('peakCalc:v1')); alert('현재 설정이 저장되었습니다 (이 기기 전용).'); }catch(e){} });
-    els.reset.addEventListener('click', ()=>{ localStorage.removeItem('peakCalc:v1'); applyModeDefaults(); compute(); });
+    els.btnImport?.addEventListener('click', ()=>els.importFile?.click());
+    els.importFile?.addEventListener('change', (e)=>{
+      const file = e.target.files?.[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        try{
+          const d = JSON.parse(reader.result);
+          if(d.bw!=null) document.getElementById('bw').value = d.bw;
+          if(d.bf!=null) document.getElementById('bf').value = d.bf;
+          if(d.mode) { state.mode = d.mode; document.getElementById('mode').value = d.mode; }
+          if(d.division){ state.division = d.division; document.getElementById('division').value = d.division; }
+          els.pSlider.value = d.pPer; els.cSlider.value = d.cPer; els.fSlider.value = d.fPer; els.wSlider.value = d.wPer; els.sSlider.value = d.sDay; els.sDrink.value = d.sDrink;
+          if(document.getElementById('glycPerKg')) document.getElementById('glycPerKg').value = d.glycPerKg||12;
+          if(document.getElementById('waterRatio')) document.getElementById('waterRatio').value = d.waterRatio||3.0;
+          compute();
+          alert('백업을 불러왔습니다.');
+        }catch(err){ alert('백업 파일을 읽는 중 오류가 발생했습니다.'); }
+      };
+      reader.readAsText(file);
+    });
 
     // Init
     initCharts();
-    if(!loadSaved()){
-      applyModeDefaults();
-    }
-    // Defaults for glycogen panel
+    els.showDate.value = state.showDate; updateDday();
+    if(!loadSaved()){ applyModeDefaults(); }
     els.glycPerKg.value = state.glycPerKg; els.waterRatio.value = state.waterRatio;
     compute();
   </script>
