@@ -1,1 +1,40 @@
-<!doctype html><html><head><meta charset='utf-8'><title>피크위크 계산기 v1.4</title></head><body><h1>피크위크 계산기 v1.4</h1><p>여기에 전체 React 코드가 포함되어 있습니다.</p></body></html>
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>피크위크 계산기 — v1.4</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-is/umd/react-is.production.min.js"></script>
+<script src="./vendor/Recharts.min.js"></script>
+<script>
+(function(){if(window.Recharts)return;let tried=false;function inj(s){const d=document.createElement('script');d.src=s;d.onload=()=>window.__RECHARTS_READY__=true;d.onerror=()=>{if(!tried){tried=true;inj('https://unpkg.com/recharts/umd/Recharts.min.js')}else window.__RECHARTS_FAILED__=true};document.head.appendChild(d)}inj('https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js')})();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+<style>body{background:#f8fafc}.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}.btn{padding:.5rem .8rem;border:1px solid #e5e7eb;border-radius:10px;background:#fff}</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel" data-presets="env,react">
+const {useState,useMemo,useRef,useEffect}=React;
+const r1=n=>Math.round((+n)*10)/10, num=(s,d=0)=>{const v=parseFloat(s);return isNaN(v)?d:v;}, clamp=(n,a,b)=>Math.min(Math.max(n,a),b);
+const DAY=[-8,-7,-6,-5,-4,-3,-2,-1,0], LABEL={-8:'D-8 (리피딩)',-7:'D-7 (리피딩)',-6:'D-6 (디플리션)',-5:'D-5 (디플리션)',-4:'D-4 (디플리션)',-3:'D-3 (디플리션)',-2:'D-2 (슈퍼컴펜세이션)',-1:'D-1 (슈퍼컴펜세이션)',0:'D-day (퍼포먼스)'};
+const MEALS=[{key:'breakfast',label:'아침'},{key:'lunch',label:'점심'},{key:'pre',label:'운동 전'},{key:'post',label:'운동 후'},{key:'prebed',label:'취침 전'}];
+const FOODS={garaetteok:{name:'가래떡',unit:100,C:49,P:3.7,F:0.4,kcal:213},rice:{name:'흰쌀밥(밥)',unit:100,C:28.3,P:2.7,F:0.3,kcal:130},honey:{name:'밤꿀',unit:100,C:82.4,P:0.3,F:0,kcal:304},eggwhite:{name:'계란흰자',unit:100,C:0.73,P:10.9,F:0.17,kcal:52},wpi:{name:'WPI',unit:30,C:1,P:25,F:0.5,kcal:110},oliveoil:{name:'올리브오일',unit:1,C:0,P:0,F:1,kcal:9}};
+function phase(d){if(d===-8||d===-7)return'refeed';if(d>=-6&&d<=-3)return'depletion';if(d===-2||d===-1)return'supercomp';return'showday'}
+function defaults(ph,profile='standard'){if(ph==='refeed')return{kind:'perLBM',cPer:6,fatPct:0.2};if(ph==='depletion')return{kind:'perLBM',cPer:1,fatPct:0.25};if(ph==='supercomp')return{kind:'perLBM',cPer:7,fatPct:0.15};return{kind:'perBW',cPer:1,fatPct:0.15}}
+function Charts({macro,timeline,weights}){if(!window.Recharts){return <section className="card p-4 mt-4"><div className="text-sm text-slate-600">Recharts 로드 실패: <b>./vendor/Recharts.min.js</b> 를 올리거나 CDN 허용 후 새로고침</div></section>}const {ResponsiveContainer,PieChart,Pie,Cell,Tooltip,BarChart,Bar,XAxis,YAxis,Legend,CartesianGrid,LineChart,Line}=window.Recharts;const COLORS=['#60a5fa','#34d399','#f59e0b'];const fmt=v=>r1(v);return <section className="card p-4 mt-4"><div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<div className="p-4 border rounded-2xl"><div className="font-semibold mb-2">매크로 도넛 (kcal)</div><div style={{width:'100%',height:220}}><ResponsiveContainer width="100%" height={220}><PieChart><Pie data={macro} dataKey="value" nameKey="name" outerRadius={80} label={({name,value})=>`${name}: ${r1(value)} kcal`}>{macro.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}</Pie><Tooltip formatter={(v,n)=>[fmt(v),n]}/></PieChart></ResponsiveContainer></div></div>
+<div className="p-4 border rounded-2xl"><div className="font-semibold mb-2">타임라인 (g)</div><div style={{width:'100%',height:220}}><ResponsiveContainer width="100%" height={220}><BarChart data={timeline}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="day"/><YAxis tickFormatter={fmt}/><Tooltip formatter={(v,n)=>[fmt(v),n]}/><Legend/><Bar dataKey="C" name="탄수(g)" fill="#60a5fa" stackId="a"/><Bar dataKey="P" name="단백질(g)" fill="#34d399" stackId="a"/><Bar dataKey="F" name="지방(g)" fill="#f59e0b" stackId="a"/></BarChart></ResponsiveContainer></div></div>
+<div className="p-4 border rounded-2xl"><div className="font-semibold mb-2">체중 추세</div><div style={{width:'100%',height:220}}><ResponsiveContainer width="100%" height={220}><LineChart data={weights}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="date"/><YAxis tickFormatter={fmt}/><Tooltip/><Legend/><Line type="monotone" dataKey="weight" name="체중(kg)" stroke="#60a5fa" dot={false}/><Line type="monotone" dataKey="bf" name="체지방(%)" stroke="#34d399" dot={false} yAxisId={1}/></LineChart></ResponsiveContainer></div></div>
+</div></section>}
+function App(){const [w,setW]=useState('69.4'),[bf,setBf]=useState('6.6'),[day,setDay]=useState(-8);const LBM=useMemo(()=>r1(num(w,0)*(1-clamp(num(bf,0),0,50)/100)),[w,bf]);const base=defaults(phase(day));const protein=useMemo(()=>r1(LBM*2.6),[LBM]);const carb=useMemo(()=>r1((base.kind==='perLBM'?LBM:num(w,0))*base.cPer),[base,LBM,w]);const fat=useMemo(()=>{const Pk=protein*4,Ck=carb*4,Fk=(base.fatPct/(1-base.fatPct))*(Pk+Ck);return r1(Fk/9)},[protein,carb,base]);const kcal=r1(protein*4+carb*4+fat*9);const macro=[{name:'탄수',value:r1(carb*4)},{name:'단백질',value:r1(protein*4)},{name:'지방',value:r1(fat*9)}];const timeline=DAY.map(d=>{const b=defaults(phase(d));const C=r1(((b.kind==='perLBM'?LBM:num(w,0))*b.cPer));const P=r1(LBM*2.6);const F=r1(((b.fatPct/(1-b.fatPct))*((P*4)+(C*4)))/9);return{day:LABEL[d],C,P,F}});const [logs,setLogs]=useState(()=>{try{return JSON.parse(localStorage.getItem('bodyLogs')||'[]')}catch(e){return[]}});useEffect(()=>localStorage.setItem('bodyLogs',JSON.stringify(logs)),[logs]);const weights=logs.map(b=>({date:b.date,weight:num(b.weight,0),bf:num(b.bf,0)}));return <div className="max-w-6xl mx-auto p-6"><div className="flex items-center justify-between"><h1 className="text-2xl font-bold">피크위크 계산기 — <span className="text-slate-500">v1.4</span></h1><div className="flex gap-2"><button className="btn" onClick={()=>window.print()}>PDF로 인쇄</button></div></div>
+<section className="card p-4 mt-4"><div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+<div><div className="text-slate-500 mb-1">체중(kg)</div><input type="number" className="w-full border rounded-xl px-3 py-2" value={w} onChange={e=>setW(e.target.value)}/></div>
+<div><div className="text-slate-500 mb-1">체지방(%)</div><input type="number" className="w-full border rounded-xl px-3 py-2" value={bf} onChange={e=>setBf(e.target.value)}/></div>
+<div><div className="text-slate-500 mb-1">일자</div><select className="w-full border rounded-xl px-3 py-2" value={day} onChange={e=>setDay(parseInt(e.target.value))}>{DAY.map(k=><option key={k} value={k}>{LABEL[k]}</option>)}</select></div>
+<div className="grid grid-cols-3 gap-2"><div className="p-2 border rounded-xl text-center"><div className="text-xs text-slate-500">탄수</div><div className="font-semibold">{r1(carb)} g</div></div><div className="p-2 border rounded-xl text-center"><div className="text-xs text-slate-500">단백질</div><div className="font-semibold">{r1(protein)} g</div></div><div className="p-2 border rounded-xl text-center"><div className="text-xs text-slate-500">지방</div><div className="font-semibold">{r1(fat)} g</div></div></div>
+</div><div className="mt-3 text-sm text-slate-600">총 열량: <b>{kcal} kcal</b></div></section>
+<Charts macro={macro} timeline={timeline} weights={weights}/>
+</div>}
+const root = ReactDOM.createRoot(document.getElementById('root'));root.render(<App/>);
+</script></body></html>
