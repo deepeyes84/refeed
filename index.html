@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>피크위크 계산기 — v1.2 (통합 + 카보로딩 + 전해질/수분, 1소수표기)</title>
-  <meta name="description" content="v1.1 계산 + v1.2 시각화 + 카보로딩 프리셋 + 전해질/수분 추적. 모든 수치 소수점 1자리 표기." />
+  <title>피크위크 계산기 — v1.2 (통합 + 카보로딩 + 전해질/수분 + 타이밍 + 끼니별 플래너 + 내보내기)</title>
+  <meta name="description" content="v1.1 계산 + v1.2 시각화 + 카보로딩 프리셋 + 전해질/수분 + 식사 타이밍 분할 + 끼니별 식단 플래너 + PDF/PNG 내보내기. 모든 수치 1소수." />
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
     html,body{height:100%}
@@ -21,6 +21,10 @@
     .card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
     input[type=number]{appearance:textfield;-moz-appearance:textfield}
     input[type=number]::-webkit-outer-spin-button,input[type=number]::-webkit-inner-spin-button{appearance:none;margin:0}
+    .muted{color:#64748b}
+    .chip{border:1px solid #e5e7eb;border-radius:999px;padding:.25rem .6rem;font-size:12px;background:#fff}
+    .btn{padding:.5rem .8rem;border:1px solid #e5e7eb;border-radius:10px;background:#fff}
+    @media print {.no-print{display:none} body{background:#fff}}
   </style>
 
   <!-- React / ReactDOM -->
@@ -50,6 +54,9 @@
     })();
   </script>
 
+  <!-- html2canvas for PNG export -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin></script>
+
   <!-- Babel -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 </head>
@@ -57,7 +64,7 @@
   <div id="root"></div>
 
   <script type="text/babel" data-presets="env,react">
-    const { useMemo, useState } = React;
+    const { useMemo, useState, useRef } = React;
 
     // ---------- 유틸 (소수점 1자리 고정) ----------
     const r1 = n => Math.round((+n)*10)/10; // ensure numeric then 1-decimal
@@ -84,6 +91,15 @@
       { key: "extreme",      label: "익스트림" },
     ];
     const PROTEIN_LEVELS = [2.3, 2.6, 2.9, 3.1];
+
+    // 식사 타이밍 키
+    const MEALS = [
+      { key:"breakfast", label:"아침" },
+      { key:"lunch", label:"점심" },
+      { key:"pre", label:"운동 전" },
+      { key:"post", label:"운동 후" },
+      { key:"prebed", label:"취침 전" },
+    ];
 
     function phaseForDay(dayKey) {
       if (dayKey === -8 || dayKey === -7) return "refeed";
@@ -205,7 +221,9 @@
 
     // ---------- 메인 ----------
     function App(){
-      // 입력 (문자열로 보관: 0을 지우는 문제 해결)
+      const printableRef = useRef(null);
+
+      // 입력 (문자열로 보관: 0 지우기 문제 해결)
       const [weightStr, setWeightStr] = useState("69.4");
       const [bfStr, setBfStr] = useState("6.6");
       const [dayKey, setDayKey] = useState(-8);
@@ -219,7 +237,11 @@
       const [magnesiumStr, setMagnesiumStr] = useState("0");    // Mg mg
       const [waterMlStr, setWaterMlStr] = useState("0");        // ml
 
-      // 플래너(식단) - g 단위 (문자열)
+      // 끼니별 Na/물 분배(%) — 기본: 운동 전/후 가중치
+      const [splitNa, setSplitNa] = useState({ breakfast:15, lunch:20, pre:20, post:30, prebed:15 });
+      const [splitH2O, setSplitH2O] = useState({ breakfast:20, lunch:20, pre:25, post:25, prebed:10 });
+
+      // 플래너(식단) - g 단위 (문자열 / 하루 합계)
       const [plan, setPlan] = useState({
         garaetteok: "200",
         rice: "300",
@@ -231,6 +253,20 @@
         oliveoil: "0",
       });
 
+      // 끼니별 플래너(자동 배분 결과 저장, 문자열 g)
+      const [mealPlan, setMealPlan] = useState({
+        breakfast:{}, lunch:{}, pre:{}, post:{}, prebed:{}
+      });
+
+      // 카보로딩 모드
+      const [carbOnly, setCarbOnly] = useState(false);
+      const [mix, setMix] = useState({ garaetteok: 60, rice: 30, honey: 10 }); // %
+
+      // 식사 타이밍(분할) 퍼센트 (각 매크로 별로 합 100)
+      const [splitC, setSplitC] = useState({ breakfast:20, lunch:20, pre:20, post:20, prebed:20 });
+      const [splitP, setSplitP] = useState({ breakfast:20, lunch:20, pre:20, post:20, prebed:20 });
+      const [splitF, setSplitF] = useState({ breakfast:20, lunch:20, pre:20, post:20, prebed:20 });
+
       const weight = useMemo(()=> num(weightStr, 0), [weightStr]);
       const bf = useMemo(()=> num(bfStr, 0), [bfStr]);
       const proteinLevel = useMemo(()=> num(proteinLevelStr, 2.6), [proteinLevelStr]);
@@ -239,7 +275,7 @@
       const phase = useMemo(()=> phaseForDay(dayKey), [dayKey]);
       const dflt = useMemo(()=> defaultsByPhase(phase, profile), [phase, profile]);
 
-      // 목표 매크로
+      // 목표 매크로 (1소수 표기)
       const protein_g = useMemo(()=> r1(LBM * proteinLevel), [LBM, proteinLevel]);
       const carb_g    = useMemo(()=> r1((dflt.kind === "perLBM" ? LBM : weight) * dflt.cPer), [dflt, LBM, weight]);
       const Pkcal = r1(protein_g*4);
@@ -248,7 +284,7 @@
       const fat_g = r1(Fkcal/9);
       const total_kcal = r1(Pkcal + Ckcal + Fkcal);
 
-      // 합계
+      // 하루 합계(현재 플랜 → 합계 매크로)
       const totals = useMemo(()=>{
         let C=0,P=0,F=0,K=0;
         Object.keys(plan).forEach(key=>{
@@ -283,13 +319,9 @@
         F: r1(fat_g - totals.F),
         K: r1(total_kcal - totals.K),
       };
-      const statusClass = (x)=> Math.abs(x) < 5 ? "ok" : (Math.abs(x) <= 15 ? "warn" : "err");
 
-      // ---- 액션: 카보로딩 ----
-      const CARB_KEYS = ["garaetteok","rice","honey"];
-      const [carbOnly, setCarbOnly] = useState(false);
-      const [mix, setMix] = useState({ garaetteok: 60, rice: 30, honey: 10 }); // %
-      function autoDistributeCarb() {
+      // ---- 카보로딩 자동배분 (하루 합계) ----
+      function autoDistributeCarbDay() {
         const cpg = (key)=> FOODS[key].C / FOODS[key].unit;
         const totalShare = (mix.garaetteok||0) + (mix.rice||0) + (mix.honey||0);
         const share = {
@@ -307,21 +339,17 @@
           garaetteok: String(grams.garaetteok),
           rice: String(grams.rice),
           honey: String(grams.honey),
-          chicken: "0",
-          eggwhite: "0",
-          avocado: "0",
-          oliveoil: "0",
+          // 단백질은 WPI로 맞추는 버튼 유지
         }));
       }
       function fixProteinWithWPI() {
         const need = Math.max(0, protein_g - totals.P);
         const pPerGramWPI = FOODS.wpi.P / FOODS.wpi.unit; // 25/30=0.833.. gP per g
         const wpiGrams = round5(need / pPerGramWPI);
-        setPlan(p=>({ ...p, chicken:"0", eggwhite:"0", wpi:String(wpiGrams) }));
+        setPlan(p=>({ ...p, wpi:String(wpiGrams) }));
       }
 
-      // ---- 전해질/수분 계산 ----
-      // 1 g 소금 ≈ 393 mg 나트륨
+      // ---- 전해질/수분 총량 ----
       const sodiumFromSalt_mg = useMemo(()=> r1(num(saltGramStr,0) * 393), [saltGramStr]);
       const sodiumExtra_mg = useMemo(()=> r1(num(sodiumExtraStr,0)), [sodiumExtraStr]);
       const sodiumTotal_mg = useMemo(()=> r1(sodiumFromSalt_mg + sodiumExtra_mg), [sodiumFromSalt_mg, sodiumExtra_mg]);
@@ -329,15 +357,134 @@
       const magnesium_mg   = useMemo(()=> r1(num(magnesiumStr,0)), [magnesiumStr]);
       const water_ml       = useMemo(()=> r1(num(waterMlStr,0)), [waterMlStr]);
 
+      // ---- 식사 타이밍 분할 계산(매크로) ----
+      const sumPerc = (obj)=> Object.values(obj).reduce((a,b)=>a+Number(b||0),0);
+      function splitMacro(total, splitObj){
+        const out={};
+        MEALS.forEach(m=>{
+          const p = Number(splitObj[m.key]||0)/100;
+          out[m.key] = r1(total * p);
+        });
+        return out;
+      }
+      const perMeal = {
+        C: splitMacro(carb_g, { ...splitC }),
+        P: splitMacro(protein_g, { ...splitP }),
+        F: splitMacro(fat_g, { ...splitF }),
+      };
+      const perMealKcal = MEALS.reduce((acc,m)=>{
+        acc[m.key] = r1(perMeal.C[m.key]*4 + perMeal.P[m.key]*4 + perMeal.F[m.key]*9);
+        return acc;
+      },{});
+
+      // ---- 끼니별 전해질/수분 분배 ----
+      function splitByPercent(total, splitObj){
+        const out={};
+        MEALS.forEach(m=>{
+          const p = Number(splitObj[m.key]||0)/100;
+          out[m.key] = r1(total * p);
+        });
+        return out;
+      }
+      const perMealNa   = splitByPercent(sodiumTotal_mg, splitNa);
+      const perMealH2O  = splitByPercent(water_ml, splitH2O);
+
+      // ---- 끼니별 식단 자동 배분 ----
+      // 원칙:
+      // - 탄수: CARB_KEYS 비율(mix)에 따라 각 끼니의 탄수(g)를 재료 g로 환산
+      // - 단백질: WPI 우선으로 맞춤 (부족분 있으면 eggwhite 보조)
+      // - 지방: oliveoil 우선으로 맞춤
+      function autoDistributeMeals(){
+        const cpg = (key)=> FOODS[key].C / FOODS[key].unit; // gC per g
+        const ppg = (key)=> FOODS[key].P / FOODS[key].unit; // gP per g
+        const fpg = (key)=> FOODS[key].F / FOODS[key].unit; // gF per g
+
+        const totalShare = (mix.garaetteok||0) + (mix.rice||0) + (mix.honey||0);
+        const share = {
+          garaetteok: (mix.garaetteok||0)/totalShare,
+          rice:       (mix.rice||0)/totalShare,
+          honey:      (mix.honey||0)/totalShare,
+        };
+
+        const next = {};
+        MEALS.forEach(m=>{
+          // 탄수 → 재료 g
+          const Ctarget = perMeal.C[m.key];
+          const grams = {
+            garaetteok: round5((Ctarget * share.garaetteok) / cpg('garaetteok')),
+            rice:       round5((Ctarget * share.rice) / cpg('rice')),
+            honey:      round5((Ctarget * share.honey) / cpg('honey')),
+          };
+
+          // 단백질(WPI 우선)
+          const Ptarget = perMeal.P[m.key];
+          const wpi_g_per_P = 1 / ppg('wpi'); // ≈ 1.2 g WPI per 1 g protein
+          let wpiGrams = round5(Ptarget * wpi_g_per_P);
+          // 지방 최소화를 위해 WPI만 우선 사용 (필요하면 흰자 보조)
+          const PfromWPI = wpiGrams * ppg('wpi');
+          let Pneed = Math.max(0, Ptarget - PfromWPI);
+          let eggwhiteGrams = 0;
+          if (Pneed > 0){
+            eggwhiteGrams = round5(Pneed / ppg('eggwhite'));
+          }
+
+          // 지방(olive oil 우선)
+          const Ftarget = perMeal.F[m.key];
+          let oliveOilGrams = round5(Ftarget / fpg('oliveoil'));
+
+          next[m.key] = {
+            garaetteok: String(grams.garaetteok),
+            rice: String(grams.rice),
+            honey: String(grams.honey),
+            wpi: String(wpiGrams),
+            eggwhite: String(eggwhiteGrams),
+            oliveoil: String(oliveOilGrams),
+            chicken: "0",
+            avocado: "0",
+          };
+        });
+        setMealPlan(next);
+      }
+
+      // 합산 함수(끼니별 플랜 → 매크로)
+      function macrosFromMeal(mealObj){
+        let C=0,P=0,F=0,K=0;
+        Object.keys(mealObj||{}).forEach(key=>{
+          const g = num(mealObj[key],0);
+          const f = FOODS[key]; if(!f) return;
+          const x=g/f.unit;
+          C += f.C*x; P += f.P*x; F += f.F*x; K += f.kcal*x;
+        });
+        return {C:r1(C),P:r1(P),F:r1(F),K:r1(K)};
+      }
+
+      // PNG 저장
+      async function savePNG(){
+        if (!window.html2canvas) { alert("html2canvas가 로드되지 않았습니다."); return; }
+        const node = printableRef.current || document.body;
+        const canvas = await window.html2canvas(node, {scale:2, backgroundColor:"#ffffff"});
+        const url = canvas.toDataURL("image/png");
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "peakweek_planner.png";
+        a.click();
+      }
+
       const visibleKeys = carbOnly ? CARB_KEYS.concat(['wpi']) : Object.keys(FOODS);
+      const validC = sumPerc(splitC)===100, validP = sumPerc(splitP)===100, validF = sumPerc(splitF)===100;
+      const splitClass = ok => ok ? "chip" : "chip err";
 
       return (
-        <div className="w-full min-h-screen text-slate-900">
+        <div className="w-full min-h-screen text-slate-900" ref={printableRef}>
           <div className="max-w-6xl mx-auto p-6">
             <div className="flex items-center justify-between gap-2">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 <span className="badge">통합 + 카보로딩 + 전해질/수분</span></h1>
-              <div className="text-sm text-slate-500">모든 수치: 소수점 1자리</div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — v1.2 <span className="badge">통합 + 카보로딩 + 전해질/수분 + 타이밍 + 끼니별</span></h1>
+              <div className="no-print flex items-center gap-2">
+                <button className="btn" onClick={()=>window.print()}>PDF로 인쇄</button>
+                <button className="btn" onClick={savePNG}>PNG로 저장</button>
+              </div>
             </div>
+            <div className="text-sm text-slate-500">모든 수치: 소수점 1자리</div>
 
             {/* 입력 카드 */}
             <section className="card p-4 mt-4">
@@ -414,8 +561,8 @@
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 mt-3">
-                <button className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" onClick={autoDistributeCarb}>1) 비율대로 탄수 자동배분</button>
-                <button className="px-4 py-2 rounded-xl border bg-white hover:bg-slate-50" onClick={fixProteinWithWPI}>2) 단백질을 WPI로 보정(저지방)</button>
+                <button className="btn" onClick={autoDistributeCarbDay}>1) (하루) 탄수 자동배분</button>
+                <button className="btn" onClick={fixProteinWithWPI}>2) (하루) 단백질을 WPI로 보정</button>
                 <span className="text-xs text-slate-500">자동배분은 g 단위를 5g 단위로 반올림합니다.</span>
               </div>
             </section>
@@ -452,20 +599,166 @@
                     value={waterMlStr} onChange={e=>setWaterMlStr(e.target.value)} />
                 </div>
               </div>
-              <p className="text-xs text-slate-500 mt-2">* 목표치(권장량)는 사람마다 다릅니다. 코치의 지침에 맞춰 목표를 별도 관리하세요. 이 카드는 입력값 추적/합계 도구입니다.</p>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3 text-sm">
-                <div className="stat"><div className="text-slate-500">Na(총)</div><div className="font-semibold">{r1(sodiumTotal_mg)} mg</div></div>
-                <div className="stat"><div className="text-slate-500">K</div><div className="font-semibold">{r1(potassium_mg)} mg</div></div>
-                <div className="stat"><div className="text-slate-500">Mg</div><div className="font-semibold">{r1(magnesium_mg)} mg</div></div>
-                <div className="stat"><div className="text-slate-500">물</div><div className="font-semibold">{r1(water_ml)} ml</div></div>
-                <div className="stat"><div className="text-slate-500">소금→Na 변환</div><div className="font-semibold">1 g ≈ 393 mg</div></div>
+
+              {/* 끼니별 권장 분배 % */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                <div className="stat">
+                  <div className="font-semibold mb-2">나트륨 분배(%)</div>
+                  {MEALS.map(m=>(
+                    <div key={m.key} className="flex items-center justify-between mb-1">
+                      <span className="muted">{m.label}</span>
+                      <input type="number" className="w-24 border rounded-xl px-2 py-1"
+                        value={splitNa[m.key]} onChange={e=>setSplitNa(s=>({...s,[m.key]: num(e.target.value,0)}))} />
+                    </div>
+                  ))}
+                  <div className="text-xs text-slate-500 mt-1">합계: {sumPerc(splitNa)}% (100% 권장)</div>
+                </div>
+                <div className="stat">
+                  <div className="font-semibold mb-2">물 분배(%)</div>
+                  {MEALS.map(m=>(
+                    <div key={m.key} className="flex items-center justify-between mb-1">
+                      <span className="muted">{m.label}</span>
+                      <input type="number" className="w-24 border rounded-xl px-2 py-1"
+                        value={splitH2O[m.key]} onChange={e=>setSplitH2O(s=>({...s,[m.key]: num(e.target.value,0)}))} />
+                    </div>
+                  ))}
+                  <div className="text-xs text-slate-500 mt-1">합계: {sumPerc(splitH2O)}% (100% 권장)</div>
+                </div>
+              </div>
+
+              {/* 끼니별 Na/물 추천량 */}
+              <div className="overflow-x-auto mt-3">
+                <table className="table">
+                  <thead>
+                    <tr><th>끼니</th><th>Na (mg)</th><th>물 (ml)</th></tr>
+                  </thead>
+                  <tbody>
+                    {MEALS.map(m=> (
+                      <tr key={m.key}>
+                        <td>{m.label}</td>
+                        <td>{r1(perMealNa[m.key]||0)}</td>
+                        <td>{r1(perMealH2O[m.key]||0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </section>
 
-            {/* 식단 플래너 */}
+            {/* 식사 타이밍 분할 (매크로) */}
+            <section className="card p-4 mt-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="font-semibold">식사 타이밍 분할 (아침 / 점심 / 운동 전 / 운동 후 / 취침 전)</div>
+                <div className="flex items-center gap-2">
+                  <span className={sumPerc(splitC)===100 ? "chip" : "chip err"}>탄수 합계 {sumPerc(splitC)}%</span>
+                  <span className={sumPerc(splitP)===100 ? "chip" : "chip err"}>단백질 합계 {sumPerc(splitP)}%</span>
+                  <span className={sumPerc(splitF)===100 ? "chip" : "chip err"}>지방 합계 {sumPerc(splitF)}%</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
+                {/* 탄수 분배 */}
+                <div className="stat">
+                  <div className="font-semibold mb-2">탄수(%)</div>
+                  {MEALS.map(m=>(
+                    <div key={m.key} className="flex items-center justify-between mb-1">
+                      <span className="muted">{m.label}</span>
+                      <input type="number" className="w-24 border rounded-xl px-2 py-1"
+                        value={splitC[m.key]} onChange={e=>setSplitC(s=>({...s,[m.key]: num(e.target.value,0)}))} />
+                    </div>
+                  ))}
+                </div>
+                {/* 단백질 분배 */}
+                <div className="stat">
+                  <div className="font-semibold mb-2">단백질(%)</div>
+                  {MEALS.map(m=>(
+                    <div key={m.key} className="flex items-center justify-between mb-1">
+                      <span className="muted">{m.label}</span>
+                      <input type="number" className="w-24 border rounded-xl px-2 py-1"
+                        value={splitP[m.key]} onChange={e=>setSplitP(s=>({...s,[m.key]: num(e.target.value,0)}))} />
+                    </div>
+                  ))}
+                </div>
+                {/* 지방 분배 */}
+                <div className="stat">
+                  <div className="font-semibold mb-2">지방(%)</div>
+                  {MEALS.map(m=>(
+                    <div key={m.key} className="flex items-center justify-between mb-1">
+                      <span className="muted">{m.label}</span>
+                      <input type="number" className="w-24 border rounded-xl px-2 py-1"
+                        value={splitF[m.key]} onChange={e=>setSplitF(s=>({...s,[m.key]: num(e.target.value,0)}))} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 분할 결과 */}
+              <div className="overflow-x-auto mt-3">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>끼니</th>
+                      <th>탄수(g)</th>
+                      <th>단백질(g)</th>
+                      <th>지방(g)</th>
+                      <th>kcal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {MEALS.map(m=> (
+                      <tr key={m.key}>
+                        <td>{m.label}</td>
+                        <td>{r1(perMeal.C[m.key])}</td>
+                        <td>{r1(perMeal.P[m.key])}</td>
+                        <td>{r1(perMeal.F[m.key])}</td>
+                        <td>{r1(perMealKcal[m.key])}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* 끼니별 식단 플래너 (자동 배분) */}
+            <section className="card p-4 mt-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="font-semibold">끼니별 식단 플래너 (자동 배분 → 수동 미세조정)</div>
+                <div className="no-print flex items-center gap-2">
+                  <button className="btn" onClick={autoDistributeMeals}>끼니별 자동 배분 실행</button>
+                </div>
+              </div>
+              <p className="text-sm text-slate-500 mt-1">원칙: 탄수는 카보 프리셋 비율, 단백질은 WPI 우선(부족 시 흰자), 지방은 올리브오일 우선.</p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                {MEALS.map(m=>{
+                  const mp = mealPlan[m.key] || {};
+                  const mac = macrosFromMeal(mp);
+                  return (
+                    <div key={m.key} className="stat">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-semibold">{m.label}</div>
+                        <div className="text-xs text-slate-500">합계: C {mac.C} · P {mac.P} · F {mac.F} · {mac.K} kcal</div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {["garaetteok","rice","honey","wpi","eggwhite","oliveoil"].map(key=>(
+                          <div key={key}>
+                            <label className="block text-xs mb-1">{FOODS[key].name} (g)</label>
+                            <input type="number" className="w-full border rounded-xl px-2 py-1"
+                              value={mp[key] ?? ""}
+                              onChange={e=>setMealPlan(prev=>({ ...prev, [m.key]: { ...(prev[m.key]||{}), [key]: e.target.value } }))} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            {/* 식단 플래너 (하루 합계) */}
             <section className="card p-4 mt-4">
               <div className="flex items-center justify-between mb-2">
-                <div className="font-semibold">식단 플래너 (g 단위, 1소수 표기)</div>
+                <div className="font-semibold">식단 플래너 (하루 합계, g 단위, 1소수)</div>
                 <div className="text-sm text-slate-500">목표 매크로와의 편차가 실시간 계산됩니다.</div>
               </div>
               <div className="overflow-x-auto">
@@ -474,7 +767,7 @@
                     <tr><th>식품</th><th>g</th><th>탄수(g)</th><th>단백질(g)</th><th>지방(g)</th><th>kcal</th></tr>
                   </thead>
                   <tbody>
-                    { (carbOnly ? CARB_KEYS.concat(['wpi']) : Object.keys(FOODS)).map((key)=>{
+                    { visibleKeys.map((key)=>{
                       const f=FOODS[key];
                       const g=num(plan[key],0);
                       const x=g/f.unit;
