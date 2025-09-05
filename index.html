@@ -3,9 +3,12 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>피크위크 계산기 — v1.4 (CDN 전용)</title>
-  <meta name="description" content="v1.1 계산 + v1.2 시각화 + 카보로딩 + 전해질/수분 + 식사 타이밍 + 끼니별 플래너 + 스케줄/운동 연동 + 체중로그/피드백 + 당일전략 + 재료관리. 모든 수치 1소수. CDN-only build." />
+  <title>피크위크 계산기 — v1.4 (체중로그·피드백 + 당일전략 + 재료관리) — CDN-only</title>
+  <meta name="description" content="v1.1 계산 + v1.2 시각화 + 카보로딩 + 전해질/수분 + 식사 타이밍 + 끼니별 플래너 + 스케줄/운동 연동 + 체중로그/피드백 + 당일전략 + 재료관리. 모든 수치 1소수." />
+
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+
   <style>
     html,body{height:100%}
     body{background:#f8fafc}
@@ -27,18 +30,35 @@
     @media print {.no-print{display:none} body{background:#fff}}
   </style>
 
-  <!-- React / ReactDOM -->
+  <!-- React / ReactDOM (UMD) -->
   <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
 
-  <!-- react-is & Recharts (CDN only) -->
+  <!-- react-is (required by Recharts) -->
   <script src="https://cdn.jsdelivr.net/npm/react-is/umd/react-is.production.min.js" crossorigin></script>
-  <script src="https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js" crossorigin></script>
+
+  <!-- Recharts UMD (CDN-first with simple fallback) -->
+  <script>
+    (function loadRechartsCDN(){
+      function add(src, onload, onerror){
+        var s=document.createElement('script'); s.src=src; s.crossOrigin='anonymous';
+        s.onload=onload; s.onerror=onerror; document.head.appendChild(s);
+      }
+      if (window.Recharts) return;
+      add('https://cdn.jsdelivr.net/npm/recharts/umd/Recharts.min.js',
+        function(){ window.__RECHARTS_OK__=true; },
+        function(){ add('https://unpkg.com/recharts/umd/Recharts.min.js',
+          function(){ window.__RECHARTS_OK__=true; },
+          function(){ window.__RECHARTS_FAILED__=true; }
+        ); }
+      );
+    })();
+  </script>
 
   <!-- html2canvas for PNG export -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" crossorigin></script>
 
-  <!-- Babel -->
+  <!-- Babel (for JSX in single file deploys like GitHub Pages) -->
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -148,7 +168,7 @@
         return (
           <section className="card p-4 mt-4">
             <div className="font-semibold mb-2">시각화 대시보드</div>
-            <div className="notice">Recharts 로드 실패: 네트워크에서 jsDelivr/unpkg가 차단되어 있지 않은지 확인하세요.</div>
+            <div className="notice">Recharts 로드 실패: 네트워크에서 jsDelivr 또는 unpkg 접근을 허용한 뒤 새로고침하세요.</div>
           </section>
         );
       }
@@ -556,7 +576,7 @@
         <div className="w-full min-h-screen text-slate-900" ref={printableRef}>
           <div className="max-w-7xl mx-auto p-6">
             <div className="flex items-center justify-between gap-2">
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — <span className="badge">v1.4</span><span className="ml-2 text-xs text-slate-500">(CDN 전용)</span></h1>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">피크위크 계산기 — <span className="badge">v1.4</span></h1>
               <div className="no-print flex items-center gap-2">
                 <button className="btn" onClick={()=>window.print()}>PDF로 인쇄</button>
                 <button className="btn" onClick={savePNG}>PNG로 저장</button>
@@ -570,7 +590,7 @@
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                 <div className="stat">
                   <div className="text-slate-500">단계</div>
-                  <div className="font-semibold">{PHASE_LABEL[phaseForDay(dayKey)]}</div>
+                  <div className="font-semibold">{PHASE_LABEL[phase]}</div>
                   <div className="text-xs text-slate-500 mt-1">{exNote}</div>
                 </div>
                 <div className="stat"><div className="text-slate-500">탄수</div><div className="font-semibold">{r1(carb_g)} g</div></div>
@@ -634,7 +654,7 @@
                       </div>
                       <div><label className="text-xs">시간 (분)</label>
                         <input type="number" className="w-full border rounded-xl px-2 py-1" value={s.minutes||0}
-                          onChange={e=>setSessions	arr=>arr.map((v,i)=>i===idx?{...v,minutes:num(e.target.value,0)}:v)}/>
+                          onChange={e=>setSessions(arr=>arr.map((v,i)=>i===idx?{...v,minutes:num(e.target.value,0)}:v))}/>
                       </div>
                       <div><label className="text-xs">kcal 직접입력(선택)</label>
                         <input type="number" className="w-full border rounded-xl px-2 py-1" value={s.kcalOverride||""}
@@ -698,7 +718,7 @@
                 <div className="stat">
                   <div className="font-semibold mb-2">물 분배(%)</div>
                   {MEALS.map(m=>(
-                    <div key={m.key} className="flex items-center justify_between mb-1"><span className="muted">{m.label}</span>
+                    <div key={m.key} className="flex items-center justify-between mb-1"><span className="muted">{m.label}</span>
                       <input type="number" className="w-24 border rounded-xl px-2 py-1" value={splitH2O[m.key]} onChange={e=>setSplitH2O(s=>({...s,[m.key]: num(e.target.value,0)}))} /></div>
                   ))}
                   <div className="text-xs text-slate-500 mt-1">합계: {sumPerc(splitH2O)}% (100% 추천)</div>
@@ -751,7 +771,7 @@
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
                 {MEALS.map(m=>{
                   const mp = mealPlan[m.key] || {};
-                  const mac = (function(){
+                  const mac = (function(){ // 합계
                     let C=0,P=0,F=0,K=0;
                     Object.keys(mp).forEach(key=>{ const f=FOODS[key]; if(!f) return; const g=num(mp[key],0), x=g/f.unit; C+=f.C*x; P+=f.P*x; F+=f.F*x; K+=f.kcal*x; });
                     return {C:r1(C),P:r1(P),F:r1(F),K:r1(K)};
